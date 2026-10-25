@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b4f8a">
+<title>KY入力</title>
+<style>
+  :root {
+    --bg: #eef1f5;
+    --card: #ffffff;
+    --text: #111418;
+    --muted: #4a525c;
+    --line: #b9c1cb;
+    --primary: #0b4f8a;
+    --primary-ink: #ffffff;
+    --on: #c2410c;
+    --on-bg: #fff1e6;
+    --error: #b91c1c;
+    --error-bg: #fdecec;
+    --focus: #f59e0b;
+    --tap: 56px;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Noto Sans JP", "Hiragino Sans", sans-serif;
+    font-size: 18px;
+    line-height: 1.5;
+    /* 下部の確認ボタン＋タブ分の余白 */
+    padding-bottom: calc(76px + 64px + env(safe-area-inset-bottom));
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* 見出し */
+  .app-header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--primary); color: var(--primary-ink);
+    padding: 12px 16px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
+  .app-header h1 { margin: 0; font-size: 22px; letter-spacing: .02em; }
+  .app-header p { margin: 2px 0 0; font-size: 14px; opacity: .85; }
+
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+
+  /* 入力カード */
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.08);
+  }
+  .card h2 {
+    margin: 0 0 12px; font-size: 20px;
+    padding-left: 10px; border-left: 5px solid var(--primary);
+  }
+  .field { margin-bottom: 18px; }
+  .field:last-child { margin-bottom: 0; }
+  .label { display: block; font-weight: 700; margin-bottom: 6px; }
+  .req {
+    display: inline-block; margin-left: 6px; padding: 0 6px;
+    font-size: 13px; font-weight: 700; border-radius: 4px;
+    background: var(--error); color: #fff; vertical-align: 2px;
+  }
+  .hint { display: block; font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+  .input, .textarea {
+    width: 100%;
+    min-height: var(--tap);
+    padding: 12px 14px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+  }
+  .textarea { min-height: 112px; resize: vertical; }
+  .input:focus, .textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(11,79,138,.25); }
+
+  .error-msg { display: none; color: var(--error); font-weight: 700; font-size: 15px; margin-top: 6px; }
+  .has-error .input, .has-error .textarea { border-color: var(--error); background: var(--error-bg); }
+  .has-error .error-msg { display: block; }
+  .has-error .hazards { outline: 2px solid var(--error); outline-offset: 4px; border-radius: 8px; }
+
+  /* 危険のポイント（大きなパネル） */
+  .hazards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hazard { position: relative; display: block; }
+  .hazard input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .hazard span {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 64px; padding: 8px;
+    border: 2px solid var(--line); border-radius: 10px;
+    background: #fff; font-weight: 700; font-size: 19px;
+    user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  .hazard span::before {
+    content: ""; flex: none; width: 22px; height: 22px;
+    border: 2px solid var(--muted); border-radius: 5px; background: #fff;
+  }
+  .hazard input:checked + span { border-color: var(--on); background: var(--on-bg); color: var(--on); border-width: 3px; }
+  .hazard input:checked + span::before {
+    border-color: var(--on); background: var(--on);
+    /* チェック印 */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 100%;
+  }
+  .hazard input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .hazard-other { grid-column: 1 / -1; }
+  .other-box { margin-top: 10px; }
+  .other-box[hidden] { display: none; }
+
+  /* 参加者 */
+  .add-row { display: flex; gap: 8px; }
+  .add-row .input { flex: 1; min-width: 0; }
+  .btn {
+    min-height: var(--tap); min-width: var(--tap);
+    padding: 0 18px; border: 0; border-radius: 10px;
+    font-weight: 700; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-primary { background: var(--primary); color: var(--primary-ink); }
+  .btn-primary:active { filter: brightness(.85); }
+  .btn-ghost { background: #fff; color: var(--primary); border: 2px solid var(--primary); }
+  .count { font-size: 15px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .chips { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: flex; align-items: center;
+    min-height: 52px; padding-left: 14px;
+    background: #e3edf7; border: 2px solid #9db8d3; border-radius: 26px;
+    font-weight: 700;
+  }
+  .chip button {
+    width: 48px; height: 48px; margin-left: 2px; border: 0; background: none;
+    font-size: 24px; line-height: 1; color: var(--muted); cursor: pointer; border-radius: 24px;
+  }
+  .chip button:active { background: rgba(0,0,0,.1); }
+  .empty { margin: 10px 0 0; color: var(--muted); font-size: 15px; }
+
+  /* 下部固定：確認ボタン */
+  .action-bar {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    padding: 10px 16px; background: rgba(238,241,245,.96);
+    border-top: 1px solid var(--line); z-index: 20;
+  }
+  .action-bar .btn { display: block; width: 100%; max-width: 608px; margin: 0 auto; min-height: 56px; font-size: 20px; }
+
+  /* 下部固定：タブ */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    height: calc(64px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: #fff; border-top: 1px solid var(--line);
+  }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border: 0; background: none; font-size: 16px; font-weight: 700; color: var(--muted);
+    cursor: pointer;
+  }
+  .tab small { font-size: 12px; font-weight: 400; }
+  .tab[aria-current="page"] { color: var(--primary); box-shadow: inset 0 4px 0 var(--primary); }
+  .tab:disabled { color: #9aa3ad; cursor: default; }
+
+  /* 確認ダイアログ */
+  dialog {
+    width: calc(100% - 32px); max-width: 600px; max-height: calc(100% - 48px);
+    padding: 0; border: 0; border-radius: var(--radius);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.55); }
+  .dlg-head { padding: 16px; background: var(--primary); color: var(--primary-ink); }
+  .dlg-head h2 { margin: 0; font-size: 20px; }
+  .dlg-body { padding: 8px 16px; }
+  .dlg-body dl { margin: 0; }
+  .dlg-body dt { font-size: 14px; color: var(--muted); font-weight: 700; margin-top: 12px; }
+  .dlg-body dd { margin: 2px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .note { margin: 16px 0 0; padding: 10px 12px; background: #fff7d6; border-radius: 8px; font-size: 15px; }
+  .dlg-foot { padding: 12px 16px 16px; }
+  .dlg-foot .btn { width: 100%; font-size: 19px; }
+
+  .toast {
+    position: fixed; left: 16px; right: 16px; z-index: 30;
+    bottom: calc(150px + env(safe-area-inset-bottom));
+    max-width: 608px; margin: 0 auto;
+    padding: 14px 16px; border-radius: 10px;
+    background: #222; color: #fff; font-weight: 700; text-align: center;
+    opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>KY（危険予知）</h1>
+  <p>作業前に全員で確認しましょう</p>
+</header>
+
+<main>
+  <form id="ky-form" novalidate>
+
+    <section class="card" aria-labelledby="h-basic">
+      <h2 id="h-basic">基本情報</h2>
+
+      <div class="field" data-field="projectName">
+        <!-- 将来は工事指示書から引き継ぐ（日報の「工事件名」と同じ値） -->
+        <label class="label" for="projectName">案件名<span class="req">必須</span></label>
+        <input class="input" id="projectName" name="projectName" type="text" autocomplete="off" placeholder="例：〇〇ビル LAN配線工事">
+        <p class="error-msg">案件名を入れてください</p>
+      </div>
+
+      <div class="field" data-field="workDate">
+        <!-- 日報の「月日」と同じ形式（YYYY-MM-DD） -->
+        <label class="label" for="workDate">作業日<span class="req">必須</span></label>
+        <input class="input" id="workDate" name="workDate" type="date">
+        <p class="error-msg">作業日を選んでください</p>
+      </div>
+
+      <div class="field">
+        <label class="label" for="workContent">作業内容</label>
+        <textarea class="textarea" id="workContent" name="workContent" placeholder="例：2階天井内のケーブル敷設"></textarea>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-hazard">
+      <h2 id="h-hazard">危険のポイント</h2>
+      <div class="field" data-field="hazards">
+        <span class="label" id="hazard-label">当てはまるものを全部押す<span class="req">必須</span></span>
+        <div class="hazards" role="group" aria-labelledby="hazard-label">
+          <label class="hazard"><input type="checkbox" name="hazards" value="高所"><span>高所</span></label>
+          <label class="hazard"><input type="checkbox" name="hazards" value="感電"><span>感電</span></label>
+          <label class="hazard"><input type="checkbox" name="hazards" value="活線"><span>活線</span></label>
+          <label class="hazard"><input type="checkbox" name="hazards" value="道路上"><span>道路上</span></label>
+          <label class="hazard"><input type="checkbox" name="hazards" value="脚立"><span>脚立</span></label>
+          <label class="hazard"><input type="checkbox" name="hazards" value="重量物"><span>重量物</span></label>
+          <label class="hazard hazard-other"><input type="checkbox" name="hazards" value="その他" id="hazardOther"><span>その他</span></label>
+        </div>
+        <p class="error-msg">危険のポイントを1つ以上選んでください</p>
+        <div class="other-box" id="otherBox" hidden>
+          <label class="label" for="hazardOtherText">その他の内容</label>
+          <input class="input" id="hazardOtherText" name="hazardOtherText" type="text" autocomplete="off" placeholder="例：狭所作業">
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-measure">
+      <h2 id="h-measure">対策</h2>
+      <div class="field">
+        <label class="label" for="measures">危険に対してどうするか</label>
+        <textarea class="textarea" id="measures" name="measures" placeholder="例：安全帯を必ず使用する／検電してから作業する"></textarea>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-focus">
+      <h2 id="h-focus">重点項目</h2>
+      <div class="field">
+        <label class="label" for="focusItem">今日いちばん気をつけること</label>
+        <input class="input" id="focusItem" name="focusItem" type="text" autocomplete="off" placeholder="例：脚立は2人作業、ヨシ！">
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-members">
+      <h2 id="h-members">参加者<span class="count" id="memberCount">0名</span></h2>
+      <div class="field" data-field="members">
+        <!-- 名簿はアプリに埋め込まない方針のため手入力（日報の「氏名」と同じ値） -->
+        <label class="label" for="memberInput">名前を入れて「追加」<span class="req">必須</span></label>
+        <div class="add-row">
+          <input class="input" id="memberInput" type="text" autocomplete="off" enterkeyhint="done" placeholder="例：山田">
+          <button class="btn btn-primary" type="button" id="addMember">追加</button>
+        </div>
+        <p class="error-msg">参加者を1人以上追加してください</p>
+        <ul class="chips" id="memberList" aria-label="参加者一覧"></ul>
+        <p class="empty" id="memberEmpty">まだ誰も追加されていません</p>
+      </div>
+    </section>
+
+  </form>
+</main>
+
+<div class="action-bar">
+  <button class="btn btn-primary" type="submit" form="ky-form">確認する</button>
+</div>
+
+<nav class="tabbar" aria-label="画面切り替え">
+  <button class="tab" type="button" disabled>指示書<small>準備中</small></button>
+  <button class="tab" type="button" aria-current="page">KY</button>
+  <button class="tab" type="button" disabled>日報<small>準備中</small></button>
+</nav>
+
+<dialog id="confirmDialog" aria-labelledby="dlg-title">
+  <div class="dlg-head"><h2 id="dlg-title">入力内容の確認</h2></div>
+  <div class="dlg-body">
+    <dl id="summary"></dl>
+    <p class="note">試作版のため、内容は保存されません。</p>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn btn-primary" type="button" id="closeDialog">閉じて入力に戻る</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  const form = document.getElementById('ky-form');
+  const $ = (id) => document.getElementById(id);
+
+  // 作業日は今日を初期値にする
+  (function setToday() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    $('workDate').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })();
+
+  // 「その他」を選んだときだけ内容欄を出す
+  $('hazardOther').addEventListener('change', (e) => {
+    $('otherBox').hidden = !e.target.checked;
+    if (e.target.checked) $('hazardOtherText').focus();
+  });
+
+  // 参加者
+  const members = [];
+
+  function renderMembers() {
+    const list = $('memberList');
+    list.innerHTML = '';
+    members.forEach((name, i) => {
+      const li = document.createElement('li');
+      li.className = 'chip';
+      li.textContent = name;
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.textContent = '×';
+      del.setAttribute('aria-label', `${name}を削除`);
+      del.addEventListener('click', () => {
+        members.splice(i, 1);
+        renderMembers();
+      });
+      li.appendChild(del);
+      list.appendChild(li);
+    });
+    $('memberCount').textContent = `${members.length}名`;
+    $('memberEmpty').hidden = members.length > 0;
+  }
+
+  function addMember() {
+    const input = $('memberInput');
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    if (members.includes(name)) {
+      showToast(`${name}さんは追加済みです`);
+      return;
+    }
+    members.push(name);
+    input.value = '';
+    renderMembers();
+    clearError('members');
+    input.focus();
+  }
+
+  $('addMember').addEventListener('click', addMember);
+  $('memberInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      addMember();
+    }
+  });
+
+  // 入力チェック
+  function setError(key, on) {
+    form.querySelector(`[data-field="${key}"]`).classList.toggle('has-error', on);
+  }
+  function clearError(key) { setError(key, false); }
+
+  function checkedHazards() {
+    return [...form.querySelectorAll('input[name="hazards"]:checked')].map((el) => el.value);
+  }
+
+  form.addEventListener('input', (e) => {
+    const box = e.target.closest('[data-field]');
+    if (box) box.classList.remove('has-error');
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const errors = {
+      projectName: !$('projectName').value.trim(),
+      workDate: !$('workDate').value,
+      hazards: checkedHazards().length === 0,
+      members: members.length === 0,
+    };
+    Object.entries(errors).forEach(([key, on]) => setError(key, on));
+
+    const firstError = Object.keys(errors).find((k) => errors[k]);
+    if (firstError) {
+      const box = form.querySelector(`[data-field="${firstError}"]`);
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast('未入力の項目があります');
+      return;
+    }
+    openSummary();
+  });
+
+  // 確認ダイアログ
+  function formatDate(value) {
+    const [y, m, d] = value.split('-').map(Number);
+    const w = '日月火水木金土'[new Date(y, m - 1, d).getDay()];
+    return `${y}年${m}月${d}日（${w}）`;
+  }
+
+  function openSummary() {
+    const hazards = checkedHazards().map((h) => {
+      const other = $('hazardOtherText').value.trim();
+      return h === 'その他' && other ? `その他（${other}）` : h;
+    });
+    const rows = [
+      ['案件名', $('projectName').value.trim()],
+      ['作業日', formatDate($('workDate').value)],
+      ['作業内容', $('workContent').value.trim()],
+      ['危険のポイント', hazards.join('、')],
+      ['対策', $('measures').value.trim()],
+      ['重点項目', $('focusItem').value.trim()],
+      ['参加者', `${members.join('、')}（${members.length}名）`],
+    ];
+    const dl = $('summary');
+    dl.innerHTML = '';
+    rows.forEach(([k, v]) => {
+      const dt = document.createElement('dt');
+      dt.textContent = k;
+      const dd = document.createElement('dd');
+      dd.textContent = v || '（未入力）';
+      dl.append(dt, dd);
+    });
+    $('confirmDialog').showModal();
+  }
+
+  $('closeDialog').addEventListener('click', () => $('confirmDialog').close());
+
+  // 短いお知らせ表示
+  let toastTimer;
+  function showToast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  renderMembers();
+</script>
+</body>
+</html>
