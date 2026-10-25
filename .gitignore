@@ -1,0 +1,7 @@
+# Excel
+*.xlsx
+*.xlsm
+
+# 画像
+*.png
+*.jpg
