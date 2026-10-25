@@ -165,6 +165,24 @@
   .sheet-note { margin: 10px 0 0; padding: 10px 12px; background: #e3edf7; border-radius: 8px; font-size: 15px; }
   .sheet-note[hidden], [data-ky-section][hidden] { display: none; }
 
+  /* 指示書QRの読み込み */
+  .order-card { border: 2px solid var(--primary); }
+  .btn-scan { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 64px; font-size: 20px; }
+  .btn-scan svg { width: 28px; height: 28px; flex: none; }
+  .order-info { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--done-bg); color: var(--done); font-weight: 700; }
+  .order-info[hidden] { display: none; }
+  .scan-video {
+    display: block; width: 100%; aspect-ratio: 1; object-fit: cover;
+    background: #000; border-radius: 10px;
+  }
+  .scan-video[hidden] { display: none; }
+  .scan-msg { margin: 10px 0 0; font-weight: 700; }
+  .scan-msg.err { color: var(--error); }
+  .paste-block { margin-top: 16px; padding-top: 12px; border-top: 2px dashed var(--line); }
+  .paste-block .textarea { min-height: 88px; font-size: 16px; word-break: break-all; }
+  .paste-block .btn { width: 100%; margin-top: 8px; }
+  .dlg-foot .btn + .btn { margin-top: 8px; }
+
   /* 参加者 */
   .add-row { display: flex; gap: 8px; }
   .add-row .input { flex: 1; min-width: 0; }
@@ -255,6 +273,14 @@
 <main>
   <form id="ky-form" novalidate>
 
+    <section class="card order-card" aria-label="工事指示書の読み込み">
+      <button class="btn btn-primary btn-scan" type="button" id="openScan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M7 12h10"/></svg>
+        指示書QRを読む
+      </button>
+      <p class="order-info" id="orderInfo" hidden></p>
+    </section>
+
     <section class="card" aria-labelledby="h-basic">
       <h2 id="h-basic">基本情報</h2>
 
@@ -309,7 +335,8 @@
       <div class="client-block">
         <span class="label" id="client-label">受注先の指定項目<span class="client-progress" id="clientProgress"></span></span>
         <span class="hint">対策をやったら押して「実施済み」にする</span>
-        <!-- 将来は工事指示書から引き継ぐ。今は試作用の仮項目を表示 -->
+        <span class="hint" id="clientSource">今は仮の項目です。指示書QRを読むと、その案件の項目に置き換わります。</span>
+        <!-- 指示書QRから受け取る。読むまでは試作用の仮項目を表示 -->
         <ul class="client-list" id="clientList" aria-labelledby="client-label" style="margin-top:10px"></ul>
       </div>
     </section>
@@ -370,6 +397,23 @@
   </div>
 </dialog>
 
+<dialog id="scanDialog" aria-labelledby="scan-title">
+  <div class="dlg-head"><h2 id="scan-title">指示書QRを読む</h2></div>
+  <div class="dlg-body">
+    <video class="scan-video" id="scanVideo" playsinline muted hidden></video>
+    <p class="scan-msg" id="scanMsg">カメラを準備しています…</p>
+    <div class="paste-block">
+      <label class="label" for="pasteText">カメラが使えないとき</label>
+      <span class="hint" style="margin:0 0 8px">スマホのカメラやGoogleレンズでQRを読み、出た文字をコピーしてここに貼り付けてください。</span>
+      <textarea class="textarea" id="pasteText" spellcheck="false" placeholder="KY1|…"></textarea>
+      <button class="btn btn-ghost" type="button" id="pasteLoad">貼り付けた文字で読み込む</button>
+    </div>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn btn-primary" type="button" id="closeScan">閉じる</button>
+  </div>
+</dialog>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -397,8 +441,8 @@
     if (on) ['hazards', 'members'].forEach(clearError);
   });
 
-  // 受注先の指定項目（将来は工事指示書から受け取る。今は試作用の仮項目）
-  const clientItems = [
+  // 受注先の指定項目（指示書QRから受け取る。読むまでは試作用の仮項目）
+  let clientItems = [
     '作業エリアをカラーコーンで区画する',
     '作業開始・終了を受注先の担当者に連絡する',
     'ヘルメット・安全靴・保護手袋を着用する',
@@ -428,6 +472,12 @@
       li.appendChild(label);
       list.appendChild(li);
     });
+    if (clientItems.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'この案件には指定項目がありません';
+      list.appendChild(li);
+    }
     updateClientProgress();
   }
 
@@ -440,6 +490,119 @@
     const done = clientDoneFlags().filter(Boolean).length;
     $('clientProgress').textContent = `${done}／${clientItems.length} 実施済み`;
   }
+
+  // 指示書QR
+  // QRの中身の形式（事務所PC用 qr.html の parseOrder と同じ）
+  //   KY1|受注番号|工事件名|作業内容|指定項目1;指定項目2;…
+  function parseOrder(raw) {
+    let s = String(raw).trim();
+    // Excelからのコピーで前後に " が付くことがある
+    if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1).replace(/""/g, '"');
+    s = s.replace(/[\r\n]+/g, ' ').trim();
+    const parts = s.split('|');
+    if (parts[0] !== 'KY1') throw new Error('工事指示書のQRではありません');
+    if (parts.length !== 5) throw new Error('QRの中身の形が正しくありません');
+    const [, orderNo, projectName, workContent, items] = parts.map((p) => p.trim());
+    if (!projectName) throw new Error('工事件名が空です');
+    return {
+      orderNo,
+      projectName,
+      workContent,
+      clientItems: items.split(';').map((t) => t.trim()).filter(Boolean),
+    };
+  }
+
+  let orderNo = '';
+
+  function applyOrder(d) {
+    orderNo = d.orderNo;
+    $('projectName').value = d.projectName;
+    if (d.workContent) $('workContent').value = d.workContent;
+    clearError('projectName');
+    clientItems = d.clientItems;
+    renderClientItems();
+    $('clientSource').textContent = '工事指示書の項目です。';
+    const info = $('orderInfo');
+    info.textContent = `✓ 指示書を読み込みました${orderNo ? `（受注番号 ${orderNo}）` : ''}`;
+    info.hidden = false;
+  }
+
+  let scanStream = null;
+  let scanTimer = null;
+
+  function setScanMsg(msg, isError) {
+    const el = $('scanMsg');
+    el.textContent = msg;
+    el.classList.toggle('err', !!isError);
+  }
+
+  function stopScanner() {
+    clearTimeout(scanTimer);
+    scanTimer = null;
+    if (scanStream) scanStream.getTracks().forEach((t) => t.stop());
+    scanStream = null;
+    const video = $('scanVideo');
+    video.srcObject = null;
+    video.hidden = true;
+  }
+
+  // 読み取った文字を取り込む。成功したら true
+  function loadOrderText(text) {
+    try {
+      applyOrder(parseOrder(text));
+    } catch (e) {
+      setScanMsg(`${e.message}。工事指示書のQRを写してください。`, true);
+      return false;
+    }
+    $('scanDialog').close();
+    showToast('指示書を読み込みました');
+    return true;
+  }
+
+  async function openScanner() {
+    $('pasteText').value = '';
+    setScanMsg('カメラを準備しています…', false);
+    $('scanDialog').showModal();
+
+    if (!('BarcodeDetector' in window) || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+      setScanMsg('このスマホ（ブラウザ）ではカメラで読み取れません。下の貼り付けを使ってください。', true);
+      return;
+    }
+    try {
+      const formats = await BarcodeDetector.getSupportedFormats();
+      if (!formats.includes('qr_code')) throw new Error('QR非対応');
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      if (!$('scanDialog').open) { stopScanner(); return; }
+      const video = $('scanVideo');
+      video.srcObject = scanStream;
+      video.hidden = false;
+      await video.play();
+      setScanMsg('PCの画面のQRを、枠いっぱいに写してください', false);
+
+      const tick = async () => {
+        if (!scanStream) return;
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length && loadOrderText(codes[0].rawValue)) return;
+        } catch (e) { /* 次のコマで再挑戦 */ }
+        scanTimer = setTimeout(tick, 250);
+      };
+      tick();
+    } catch (e) {
+      stopScanner();
+      setScanMsg('カメラを使えませんでした（許可されていない可能性があります）。下の貼り付けを使ってください。', true);
+    }
+  }
+
+  $('openScan').addEventListener('click', openScanner);
+  $('closeScan').addEventListener('click', () => $('scanDialog').close());
+  $('scanDialog').addEventListener('close', stopScanner);
+  $('pasteLoad').addEventListener('click', () => {
+    const text = $('pasteText').value;
+    if (!text.trim()) { $('pasteText').focus(); return; }
+    loadOrderText(text);
+  });
 
   // 参加者
   const members = [];
@@ -546,6 +709,7 @@
     if ($('customerSheet').checked) {
       $('clientWarn').hidden = true;
       addRows([
+        ...(orderNo ? [['受注番号', orderNo]] : []),
         ['案件名', $('projectName').value.trim()],
         ['作業日', formatDate($('workDate').value)],
         ['作業内容', $('workContent').value.trim()],
@@ -565,6 +729,7 @@
     $('clientWarn').hidden = notDone === 0;
     $('clientWarn').textContent = `受注先の指定項目に未実施が${notDone}件あります。`;
     addRows([
+      ...(orderNo ? [['受注番号', orderNo]] : []),
       ['案件名', $('projectName').value.trim()],
       ['作業日', formatDate($('workDate').value)],
       ['作業内容', $('workContent').value.trim()],
