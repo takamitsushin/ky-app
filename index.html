@@ -252,6 +252,22 @@
   .dlg-foot { padding: 12px 16px 16px; }
   .dlg-foot .btn { width: 100%; font-size: 19px; }
 
+  /* Teams送信 */
+  .btn-teams {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 64px; background: #4b53bc; color: #fff; text-decoration: none;
+  }
+  .btn-teams[hidden] { display: none; }
+  .btn-teams:active { filter: brightness(.85); }
+  .teams-step { margin-bottom: 12px; padding: 12px; border: 2px solid #4b53bc; border-radius: 10px; background: #eef0fb; }
+  .teams-step[hidden] { display: none; }
+  .teams-step p { margin: 0 0 10px; }
+  .teams-step p[hidden] { display: none; }
+  .teams-done { color: var(--done); font-weight: 700; }
+  .teams-unset { color: var(--error); font-weight: 700; font-size: 15px; }
+  .teams-manual { width: 100%; min-height: 120px; margin-bottom: 10px; padding: 8px; font-size: 15px; border: 2px solid var(--line); border-radius: 8px; background: #fff; }
+  .teams-manual[hidden] { display: none; }
+
   .toast {
     position: fixed; left: 16px; right: 16px; z-index: 30;
     bottom: calc(150px + env(safe-area-inset-bottom));
@@ -393,7 +409,15 @@
     <p class="note">試作版のため、内容は保存されません。</p>
   </div>
   <div class="dlg-foot">
-    <button class="btn btn-primary" type="button" id="closeDialog">閉じて入力に戻る</button>
+    <button class="btn btn-teams" type="button" id="sendTeams">Teamsに送る</button>
+    <div class="teams-step" id="teamsStep" hidden>
+      <p class="teams-done" id="teamsMsg"></p>
+      <textarea class="teams-manual" id="teamsManual" readonly hidden aria-label="Teamsに貼り付ける内容"></textarea>
+      <p>下のボタンでTeamsを開き、入力欄を<strong>長押し → 貼り付け → 送信</strong>してください。</p>
+      <p class="teams-unset" id="teamsUnset" hidden>このスマホには送信先のチャネルが未登録です。事務所の「Teams送信先の登録QR」を一度読むと、チャネルが直接開くようになります。</p>
+      <a class="btn btn-teams" id="teamsLink" target="_blank" rel="noopener"></a>
+    </div>
+    <button class="btn btn-ghost" type="button" id="closeDialog">閉じて入力に戻る</button>
   </div>
 </dialog>
 
@@ -584,6 +608,12 @@
   // 読み取った文字を取り込む。成功したら true
   function loadOrderText(text) {
     try {
+      // Teams送信先の登録QRを写した場合
+      if (saveTeamsUrlFrom(text)) {
+        $('scanDialog').close();
+        showTeamsSaved();
+        return true;
+      }
       applyOrder(parseOrder(orderTextFrom(text)));
     } catch (e) {
       setScanMsg(`${e.message}。工事指示書のQRを写してください。`, true);
@@ -763,54 +793,141 @@
     return `${y}年${m}月${d}日（${w}）`;
   }
 
+  // 確認画面とTeams送信文の両方で使う内容（[項目名, 値] の並び）
+  function summaryRows() {
+    const head = [
+      ...(orderNo ? [['受注番号', orderNo]] : []),
+      ['案件名', $('projectName').value.trim()],
+      ['作業日', formatDate($('workDate').value)],
+      ['作業内容', $('workContent').value.trim()],
+    ];
+    if ($('customerSheet').checked) {
+      return { rows: [...head, ['KYの実施方法', 'お客様指定の用紙で実施']], notDone: 0 };
+    }
+    const hazards = checkedHazards().map((h) => {
+      const other = $('hazardOtherText').value.trim();
+      return h === 'その他' && other ? `その他（${other}）` : h;
+    });
+    const flags = clientDoneFlags();
+    return {
+      rows: [
+        ...head,
+        ['危険のポイント', hazards.join('、')],
+        ['受注先の指定項目', clientItems.map((text, i) => `${flags[i] ? '✓ 実施済み' : '× 未実施'}：${text}`).join('\n')],
+        ['対策', $('measures').value.trim()],
+        ['重点項目', $('focusItem').value.trim()],
+        ['参加者', `${members.join('、')}（${members.length}名）`],
+      ],
+      notDone: flags.filter((f) => !f).length,
+    };
+  }
+
   function openSummary() {
+    const { rows, notDone } = summaryRows();
     const dl = $('summary');
     dl.innerHTML = '';
-    const addRows = (rows) => rows.forEach(([k, v]) => {
+    rows.forEach(([k, v]) => {
       const dt = document.createElement('dt');
       dt.textContent = k;
       const dd = document.createElement('dd');
       dd.textContent = v || '（未入力）';
       dl.append(dt, dd);
     });
-
-    if ($('customerSheet').checked) {
-      $('clientWarn').hidden = true;
-      addRows([
-        ...(orderNo ? [['受注番号', orderNo]] : []),
-        ['案件名', $('projectName').value.trim()],
-        ['作業日', formatDate($('workDate').value)],
-        ['作業内容', $('workContent').value.trim()],
-        ['KYの実施方法', 'お客様指定の用紙で実施'],
-      ]);
-      $('confirmDialog').showModal();
-      return;
-    }
-
-    const hazards = checkedHazards().map((h) => {
-      const other = $('hazardOtherText').value.trim();
-      return h === 'その他' && other ? `その他（${other}）` : h;
-    });
     // 未実施があっても確認画面には進める（注意だけ出す）
-    const flags = clientDoneFlags();
-    const notDone = flags.filter((f) => !f).length;
     $('clientWarn').hidden = notDone === 0;
     $('clientWarn').textContent = `受注先の指定項目に未実施が${notDone}件あります。`;
-    addRows([
-      ...(orderNo ? [['受注番号', orderNo]] : []),
-      ['案件名', $('projectName').value.trim()],
-      ['作業日', formatDate($('workDate').value)],
-      ['作業内容', $('workContent').value.trim()],
-      ['危険のポイント', hazards.join('、')],
-      ['受注先の指定項目', clientItems.map((text, i) => `${flags[i] ? '✓ 実施済み' : '× 未実施'}：${text}`).join('\n')],
-      ['対策', $('measures').value.trim()],
-      ['重点項目', $('focusItem').value.trim()],
-      ['参加者', `${members.join('、')}（${members.length}名）`],
-    ]);
+    // Teams送信の案内は開くたびに最初の状態へ戻す
+    $('teamsStep').hidden = true;
+    $('sendTeams').hidden = false;
     $('confirmDialog').showModal();
   }
 
   $('closeDialog').addEventListener('click', () => $('confirmDialog').close());
+
+  // Teams送信
+  // Teamsのチャネルは、リンクで開くことはできるが文面を自動で入れることはできない。
+  // そのため「内容をコピー → チャネルを開く → 貼り付けて送信」の流れにしている。
+  //
+  // 送信先チャネルのリンクはコードに書かない（このリポジトリは公開されているため）。
+  // 事務所PCの qr.html で「Teams送信先の登録QR」を作り、スマホのカメラで読むと
+  // 「アプリのアドレス#t=チャネルのリンク」で開き、そのスマホの中だけに保存される。
+  const TEAMS_KEY = 'ky.teamsUrl';
+  // qr.html の TEAMS_URL_RE と同じ
+  const TEAMS_URL_RE = /^https:\/\/teams\.(microsoft\.com|cloud\.microsoft)\/l\/channel\/\S+$/;
+
+  // このスマホに保存してある送信先（なければ空文字）
+  function teamsUrl() {
+    try {
+      const u = localStorage.getItem(TEAMS_KEY) || '';
+      return TEAMS_URL_RE.test(u) ? u : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // 読み取った文字に #t=（Teamsのリンク）があれば保存して true。なければ false
+  function saveTeamsUrlFrom(raw) {
+    const m = String(raw).match(/#t=(\S+)/);
+    if (!m) return false;
+    if (!TEAMS_URL_RE.test(m[1])) throw new Error('Teamsのチャネルのリンクではありません');
+    try {
+      localStorage.setItem(TEAMS_KEY, m[1]);
+    } catch (e) {
+      throw new Error('このスマホに保存できませんでした');
+    }
+    return true;
+  }
+
+  function showTeamsSaved() {
+    const info = $('orderInfo');
+    info.textContent = '✓ Teamsの送信先をこのスマホに登録しました';
+    info.hidden = false;
+    showToast('Teamsの送信先を登録しました');
+  }
+
+  function teamsText() {
+    const { rows, notDone } = summaryRows();
+    const lines = ['【KY報告】'];
+    rows.forEach(([k, v]) => {
+      const val = v || '（未入力）';
+      // 複数行の値は項目名の下に並べる
+      lines.push(val.includes('\n') ? `■${k}\n${val}` : `■${k}：${val}`);
+    });
+    if (notDone > 0) lines.push(`※受注先の指定項目に未実施が${notDone}件あります`);
+    return lines.join('\n');
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  $('sendTeams').addEventListener('click', async () => {
+    const text = teamsText();
+    const ok = await copyText(text);
+    const manual = $('teamsManual');
+    manual.hidden = ok;
+    if (ok) {
+      $('teamsMsg').textContent = '✓ 内容をコピーしました';
+    } else {
+      // 自動コピーできない端末では、文面を見せて手でコピーしてもらう
+      $('teamsMsg').textContent = '下の文面を全部選んでコピーしてください';
+      manual.value = text;
+    }
+    const url = teamsUrl();
+    const link = $('teamsLink');
+    link.href = url || 'https://teams.microsoft.com/';
+    link.textContent = url ? 'TeamsのKYチャネルを開く' : 'Teamsを開く';
+    $('teamsUnset').hidden = !!url;
+    $('sendTeams').hidden = true;
+    $('teamsStep').hidden = false;
+    if (!ok) { manual.focus(); manual.select(); }
+    link.scrollIntoView({ block: 'nearest' });
+  });
 
   // 短いお知らせ表示
   let toastTimer;
@@ -823,13 +940,24 @@
   }
 
   // スマホのカメラで指示書QRを読んで開いた場合（アドレスの #o= に指示書の内容が入っている）
+  // Teams送信先の登録QRを読んで開いた場合は #t= に送信先が入っている
   function loadOrderFromAddress() {
-    if (!location.hash.startsWith('#o=')) return;
-    try {
-      applyOrder(parseOrder(orderTextFrom(location.hash)));
-      showToast('指示書を読み込みました');
-    } catch (e) {
-      showToast(`指示書を読み込めませんでした（${e.message}）`);
+    if (location.hash.startsWith('#t=')) {
+      try {
+        saveTeamsUrlFrom(location.hash);
+        showTeamsSaved();
+      } catch (e) {
+        showToast(`Teamsの送信先を登録できませんでした（${e.message}）`);
+      }
+    } else if (location.hash.startsWith('#o=')) {
+      try {
+        applyOrder(parseOrder(orderTextFrom(location.hash)));
+        showToast('指示書を読み込みました');
+      } catch (e) {
+        showToast(`指示書を読み込めませんでした（${e.message}）`);
+      }
+    } else {
+      return;
     }
     // 再読み込みで二重に入らないよう、アドレスから指示書の内容を外す
     history.replaceState(null, '', location.pathname + location.search);
@@ -838,6 +966,8 @@
   renderClientItems();
   renderMembers();
   loadOrderFromAddress();
+  // アプリを開いたままの画面でQRのアドレスに移った場合（ページは読み直されない）
+  window.addEventListener('hashchange', loadOrderFromAddress);
 </script>
 </body>
 </html>

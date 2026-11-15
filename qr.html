@@ -71,6 +71,11 @@
   .qr.has-code { border: 0; padding: 0; }
   .qr svg { width: 100%; height: 100%; display: block; }
   .meta { font-size: 14px; color: var(--muted); }
+
+  /* Teams送信先の登録（下段・横いっぱい） */
+  .teams-card { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .teams-card { grid-template-columns: minmax(0, 1fr); } }
+  .teams-card textarea { min-height: 96px; }
 </style>
 </head>
 <body>
@@ -103,6 +108,22 @@
       <div class="qr" id="qr">左の欄に貼り付けると、ここにQRコードが出ます</div>
       <p class="meta" id="meta"></p>
       <a class="meta" id="openLink" href="#" target="_blank" rel="noopener" hidden>このQRの行き先をPCで開いて確かめる</a>
+    </div>
+  </section>
+
+  <section class="card teams-card" aria-labelledby="h-teams">
+    <div>
+      <h2 id="h-teams">Teams送信先の登録（スマホごとに最初の1回だけ）</h2>
+      <ol class="steps">
+        <li>Teamsで送信先のチャネル名を右クリック →「チャネルへのリンクを取得」でコピー</li>
+        <li>下の欄に貼り付け（Ctrl+V）</li>
+        <li>右に出たQRを、スマホのカメラで読む → そのスマホに送信先が登録される</li>
+      </ol>
+      <textarea id="teamsSrc" spellcheck="false" placeholder="https://teams.microsoft.com/l/channel/…"></textarea>
+      <p class="status" id="teamsStatus" hidden></p>
+    </div>
+    <div class="qr-box">
+      <div class="qr" id="teamsQr">リンクを貼り付けると、ここに登録用のQRコードが出ます</div>
     </div>
   </section>
 </main>
@@ -239,6 +260,46 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
   $('src').addEventListener('input', render);
   $('sample').addEventListener('click', () => { $('src').value = SAMPLE; render(); });
   $('clear').addEventListener('click', () => { $('src').value = ''; render(); $('src').focus(); });
+
+  // Teams送信先の登録QR
+  // 中身は「KYアプリのアドレス#t=チャネルのリンク」。スマホのカメラで読むとアプリが開き、そのスマホに保存される。
+  // リンクはこのページにもGitHubにも残らない（「#」より後ろはサーバーに送られない）
+  // KYアプリ index.html の TEAMS_URL_RE と同じ
+  const TEAMS_URL_RE = /^https:\/\/teams\.(microsoft\.com|cloud\.microsoft)\/l\/channel\/\S+$/;
+
+  function renderTeams() {
+    const box = $('teamsQr');
+    const st = $('teamsStatus');
+    const setTeamsStatus = (kind, msg) => { st.className = `status ${kind}`; st.textContent = msg; st.hidden = !msg; };
+    const noQr = (msg) => { box.classList.remove('has-code'); box.textContent = msg; };
+
+    const link = $('teamsSrc').value.trim();
+    if (!link) {
+      setTeamsStatus('', '');
+      noQr('リンクを貼り付けると、ここに登録用のQRコードが出ます');
+      return;
+    }
+    if (!TEAMS_URL_RE.test(link)) {
+      setTeamsStatus('err', 'Teamsのチャネルのリンクではありません。「チャネルへのリンクを取得」でコピーしたものを貼り付けてください。');
+      noQr('リンクを直すとQRコードが出ます');
+      return;
+    }
+    let qr;
+    try {
+      qr = qrcode(0, 'M');
+      qr.addData(`${APP_URL}#t=${link}`, 'Byte');
+      qr.make();
+    } catch (e) {
+      setTeamsStatus('err', 'リンクが長すぎてQRコードにできません。');
+      noQr('リンクが長すぎます');
+      return;
+    }
+    box.classList.add('has-code');
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+    setTeamsStatus('ok', 'スマホのカメラで読むと、そのスマホにTeamsの送信先が登録されます。');
+  }
+
+  $('teamsSrc').addEventListener('input', renderTeams);
 </script>
 </body>
 </html>
