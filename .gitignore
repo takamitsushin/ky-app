@@ -5,3 +5,6 @@
 # 画像
 *.png
 *.jpg
+
+# 社内資料（手元だけに置く）
+nippo_koumoku.md
