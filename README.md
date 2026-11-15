@@ -4,7 +4,7 @@
 
 - `index.html` … KY入力画面（スマホ用）
 - `qr.html` … 工事指示書のQRコードと、Teams送信先の登録QRを作るページ（事務所のPC用）
-- `qr-excel.md` … 工事指示書Excelに「QR用」セルを作る方法
+- `qr-excel.md` … 工事指示書と日報のExcelに「QR用」セルを作る方法
 
 ## このリポジトリは公開されています
 

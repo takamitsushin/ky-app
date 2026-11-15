@@ -427,8 +427,8 @@
     <video class="scan-video" id="scanVideo" playsinline muted hidden></video>
     <p class="scan-msg" id="scanMsg">カメラを準備しています…</p>
     <div class="paste-block">
-      <label class="label" for="pasteText">カメラが使えないとき</label>
-      <span class="hint" style="margin:0 0 8px">スマホのカメラやGoogleレンズでQRを読み、出た文字をコピーしてここに貼り付けてください。</span>
+      <label class="label" for="pasteText">カメラを使わないとき</label>
+      <span class="hint" style="margin:0 0 8px">Excelで作ったリンクか「QR用」の文字を、ここに貼り付けてください。</span>
       <textarea class="textarea" id="pasteText" spellcheck="false" placeholder="KY1|…"></textarea>
       <button class="btn btn-ghost" type="button" id="pasteLoad">貼り付けた文字で読み込む</button>
     </div>
@@ -532,18 +532,27 @@
   // 指示書QR
   // 指示書の内容の形式（事務所PC用 qr.html の parseOrder と同じ）
   //   KY1|受注番号|工事件名|作業内容|指定項目1;指定項目2;…
+  // 日報の基本情報の形式（日報Excelの「QR用」セル。qr.html の parseOrder と同じ）
+  //   NP1|受注番号|工事件名|工事責任者|ユーザ名|ユーザ担当|依頼元|依頼担当
   // QRには「アプリのアドレス#o=（この文字をbase64urlにしたもの）」として入る
   function parseOrder(raw) {
     let s = String(raw).trim();
     // Excelからのコピーで前後に " が付くことがある
     if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1).replace(/""/g, '"');
     s = s.replace(/[\r\n]+/g, ' ').trim();
-    const parts = s.split('|');
-    if (parts[0] !== 'KY1') throw new Error('工事指示書のQRではありません');
+    const parts = s.split('|').map((p) => p.trim());
+    if (parts[0] === 'NP1') {
+      if (parts.length !== 8) throw new Error('QRの中身の形が正しくありません');
+      const [, orderNo, projectName, manager, userName, userContact, requester, requesterContact] = parts;
+      if (!projectName) throw new Error('工事件名が空です');
+      return { kind: 'report', orderNo, projectName, manager, userName, userContact, requester, requesterContact };
+    }
+    if (parts[0] !== 'KY1') throw new Error('工事指示書・日報のQRではありません');
     if (parts.length !== 5) throw new Error('QRの中身の形が正しくありません');
-    const [, orderNo, projectName, workContent, items] = parts.map((p) => p.trim());
+    const [, orderNo, projectName, workContent, items] = parts;
     if (!projectName) throw new Error('工事件名が空です');
     return {
+      kind: 'order',
       orderNo,
       projectName,
       workContent,
@@ -552,18 +561,33 @@
   }
 
   let orderNo = '';
+  // 日報QRで受け取った工事の基本情報（読むまでは null）。日報画面ができたらここから引き継ぐ
+  let report = null;
 
+  // 読み取った内容を画面に入れる。戻り値はお知らせ用の短い文
   function applyOrder(d) {
     orderNo = d.orderNo;
     $('projectName').value = d.projectName;
-    if (d.workContent) $('workContent').value = d.workContent;
     clearError('projectName');
+    const info = $('orderInfo');
+    info.hidden = false;
+    const no = orderNo ? `（受注番号 ${orderNo}）` : '';
+
+    if (d.kind === 'report') {
+      // 日報QRには作業内容・指定項目が入っていないので、そこは今のまま残す
+      report = d;
+      info.textContent = `✓ 日報の基本情報を読み込みました${no}`;
+      return '日報の基本情報を読み込みました';
+    }
+
+    // 別の工事の指示書を読んだら、前の工事の基本情報は捨てる
+    if (report && report.orderNo !== d.orderNo) report = null;
+    if (d.workContent) $('workContent').value = d.workContent;
     clientItems = d.clientItems;
     renderClientItems();
     $('clientSource').textContent = '工事指示書の項目です。';
-    const info = $('orderInfo');
-    info.textContent = `✓ 指示書を読み込みました${orderNo ? `（受注番号 ${orderNo}）` : ''}`;
-    info.hidden = false;
+    info.textContent = `✓ 指示書を読み込みました${no}`;
+    return '指示書を読み込みました';
   }
 
   let scanStream = null;
@@ -595,7 +619,16 @@
 
   // QRの中身がアプリのアドレス（…#o=…）なら、そこから指示書の内容を取り出す。
   // 古い形（KY1|… の文字だけ）はそのまま返す
+  // Excelで作るリンクは「…#p=（内容をENCODEURLしたもの）」の形（Excelの数式ではbase64にできないため）
   function orderTextFrom(raw) {
+    const p = String(raw).match(/#p=(\S+)/);
+    if (p) {
+      try {
+        return decodeURIComponent(p[1]);
+      } catch (e) {
+        throw new Error('リンクの中身の形が正しくありません');
+      }
+    }
     const m = String(raw).match(/#o=([A-Za-z0-9_-]+)/);
     if (!m) return raw;
     try {
@@ -607,6 +640,7 @@
 
   // 読み取った文字を取り込む。成功したら true
   function loadOrderText(text) {
+    let msg;
     try {
       // Teams送信先の登録QRを写した場合
       if (saveTeamsUrlFrom(text)) {
@@ -614,13 +648,13 @@
         showTeamsSaved();
         return true;
       }
-      applyOrder(parseOrder(orderTextFrom(text)));
+      msg = applyOrder(parseOrder(orderTextFrom(text)));
     } catch (e) {
-      setScanMsg(`${e.message}。工事指示書のQRを写してください。`, true);
+      setScanMsg(`${e.message}。工事指示書か日報のQRを写してください。`, true);
       return false;
     }
     $('scanDialog').close();
-    showToast('指示書を読み込みました');
+    showToast(msg);
     return true;
   }
 
@@ -798,6 +832,9 @@
     const head = [
       ...(orderNo ? [['受注番号', orderNo]] : []),
       ['案件名', $('projectName').value.trim()],
+      // 日報QRを読んだときだけ出る
+      ...(report && report.manager ? [['工事責任者', report.manager]] : []),
+      ...(report && report.userName ? [['ユーザ名', report.userName]] : []),
       ['作業日', formatDate($('workDate').value)],
       ['作業内容', $('workContent').value.trim()],
     ];
@@ -949,12 +986,11 @@
       } catch (e) {
         showToast(`Teamsの送信先を登録できませんでした（${e.message}）`);
       }
-    } else if (location.hash.startsWith('#o=')) {
+    } else if (location.hash.startsWith('#o=') || location.hash.startsWith('#p=')) {
       try {
-        applyOrder(parseOrder(orderTextFrom(location.hash)));
-        showToast('指示書を読み込みました');
+        showToast(applyOrder(parseOrder(orderTextFrom(location.hash))));
       } catch (e) {
-        showToast(`指示書を読み込めませんでした（${e.message}）`);
+        showToast(`QRを読み込めませんでした（${e.message}）`);
       }
     } else {
       return;
