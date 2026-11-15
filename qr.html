@@ -87,9 +87,9 @@
 
 <main>
   <section class="card" aria-labelledby="h-in">
-    <h2 id="h-in">1. Excelの「QR用」セルを貼り付け</h2>
+    <h2 id="h-in">1. Excelの「QR用」セルか、Salesforceの画面を貼り付け</h2>
     <ol class="steps">
-      <li>工事指示書または日報の「QR用」セルを選んでコピー（Ctrl+C）</li>
+      <li>Excelの「QR用」セルをコピー（Ctrl+C）。または、Salesforceの物件管理【工事＆保守】の画面で Ctrl+A → Ctrl+C</li>
       <li>下の欄に貼り付け（Ctrl+V）</li>
       <li>右に出たQRを、スマホのカメラで読む → KYアプリが開いて自動で入る</li>
     </ol>
@@ -108,6 +108,7 @@
     <div class="qr-box">
       <div class="qr" id="qr">左の欄に貼り付けると、ここにQRコードが出ます</div>
       <p class="meta" id="meta"></p>
+      <button class="btn btn-ghost" type="button" id="copyLink" hidden>スマホ用リンクをコピー</button>
       <a class="meta" id="openLink" href="#" target="_blank" rel="noopener" hidden>このQRの行き先をPCで開いて確かめる</a>
     </div>
   </section>
@@ -143,7 +144,42 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
   //   KY1|受注番号|工事件名|作業内容|指定項目1;指定項目2;…
   // 日報の基本情報の形式（日報Excelの「QR用」セル）
   //   NP1|受注番号|工事件名|工事責任者|ユーザ名|ユーザ担当|依頼元|依頼担当
+  // Salesforceの「物件管理【工事＆保守】」の画面を丸ごとコピーした文字から、日報の基本情報（NP1）の形を作る。
+  // 画面の文字は「項目名 → 値」の順に並ぶ（区切りは改行かタブ）。値が空だと次の項目名が続くので、
+  // 項目名の一覧（SF_LABELS）と照らして空欄を見分ける。Salesforceの画面でなければ null を返す。
+  // KYアプリ index.html の salesforceToNP1 と同じ
+  const SF_LABELS = new Set([
+    '物件分類', '受注担当者', '工番', '工事監督or保守担当者', '支援工番', '情報提供者', '情報提供報告状況', '情報提供報告期限',
+    '受注先情報', '受注先【既存】', '担当部署名', '担当者役職', '担当者名',
+    '基本情報', '納入先【既存】', '受注（予定）年月日', '契約名', '着工予定年月日', '手配種別（正式or仮手配）', '売上予定年月日',
+    '受注金額or受注予定金額', '売上年月日', '確度', '請求年月日', '取消理由',
+    '支払条件', '締日支払日', '支払方法', '支払方法（2）', '入金金額', '入金金額（2）',
+    '製品区分別売上高', '管理エリア', '納入先（+No）', '手配回数', '物件ID', '受注売上ID',
+  ]);
+
+  function salesforceToNP1(raw) {
+    // 項目名の末尾に付く「・」（必須の印）は外して比べる
+    const label = (t) => t.replace(/[・*\s]+$/, '');
+    const tokens = String(raw).split(/[\r\n\t]+/)
+      .map((t) => t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').trim()) // [名前](リンク) の形で貼られた場合は名前だけ残す
+      .filter((t) => t && !/^[▓\s]+$/.test(t));
+    const value = (name) => {
+      const i = tokens.findIndex((t) => label(t) === name);
+      if (i < 0) return null;
+      const v = tokens[i + 1];
+      return v && !SF_LABELS.has(label(v)) ? v.replace(/\|/g, '／') : '';
+    };
+    const orderNo = value('工番');
+    const projectName = value('契約名');
+    if (orderNo === null || projectName === null) return null;
+    // 受注番号｜工事件名｜工事責任者｜ユーザ名｜ユーザ担当｜依頼元｜依頼担当
+    return ['NP1', orderNo, projectName, value('工事監督or保守担当者') || '', value('納入先【既存】') || '', '',
+      value('受注先【既存】') || '', value('担当者名') || ''].join('|');
+  }
+
   function parseOrder(raw) {
+    const sf = salesforceToNP1(raw);
+    if (sf) raw = sf;
     let s = String(raw).trim();
     // Excelからのコピーで前後に " が付くことがある
     if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1).replace(/""/g, '"');
@@ -153,10 +189,10 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
     if (parts[0] === 'NP1') {
       if (parts.length !== 8) throw badCount(7);
       const [, orderNo, projectName, manager, userName, userContact, requester, requesterContact] = parts;
-      if (!projectName) throw new Error('工事件名が空です。');
-      return { kind: 'report', orderNo, projectName, manager, userName, userContact, requester, requesterContact };
+      if (!projectName) throw new Error(sf ? 'Salesforceの「契約名」が空です。' : '工事件名が空です。');
+      return { kind: 'report', orderNo, projectName, manager, userName, userContact, requester, requesterContact, fromSalesforce: !!sf };
     }
-    if (parts[0] !== 'KY1') throw new Error('先頭が「KY1|」（工事指示書）でも「NP1|」（日報）でもありません。Excelの「QR用」セルをコピーしてください。');
+    if (parts[0] !== 'KY1') throw new Error('読み取れませんでした。Excelの「QR用」セル（KY1|… か NP1|…）か、Salesforceの物件管理【工事＆保守】の画面全体をコピーして貼り付けてください。');
     if (parts.length !== 5) throw badCount(4);
     const [, orderNo, projectName, workContent, items] = parts;
     if (!projectName) throw new Error('工事件名が空です。');
@@ -230,6 +266,7 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
     box.textContent = msg;
     $('meta').textContent = '';
     $('openLink').hidden = true;
+    $('copyLink').hidden = true;
   }
 
   function render() {
@@ -273,18 +310,30 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
     $('meta').textContent = `内容${text.length}文字・QR ${qr.getModuleCount()}×${qr.getModuleCount()}マス`;
     $('openLink').href = url;
     $('openLink').hidden = false;
+    $('copyLink').textContent = 'スマホ用リンクをコピー';
+    $('copyLink').hidden = false;
 
     // 77マス（バージョン15）を超えると画面越しの読み取りが難しくなる
     if (qr.getModuleCount() > 77) {
       setStatus('warn', 'QRコードが細かいため、スマホで読み取りにくいかもしれません。文字を減らすと読み取りやすくなります。');
     } else {
-      setStatus('ok', 'この内容がスマホに入ります。スマホのカメラで読むとKYアプリが開きます。');
+      setStatus('ok', `${data.fromSalesforce ? 'Salesforceの画面から読み取りました。' : ''}この内容がスマホに入ります。スマホのカメラで読むとKYアプリが開きます。`);
     }
   }
 
   $('src').addEventListener('input', render);
   $('sample').addEventListener('click', () => { $('src').value = SAMPLE; render(); });
   $('sampleReport').addEventListener('click', () => { $('src').value = SAMPLE_REPORT; render(); });
+  // QRと同じ行き先のリンク。Teamsやメールでスマホに送って押すと、QRを読んだときと同じになる
+  $('copyLink').addEventListener('click', async () => {
+    const url = $('openLink').href;
+    try {
+      await navigator.clipboard.writeText(url);
+      $('copyLink').textContent = '✓ コピーしました（Teamsなどでスマホに送る）';
+    } catch (e) {
+      window.prompt('このリンクをコピーしてください', url);
+    }
+  });
   $('clear').addEventListener('click', () => { $('src').value = ''; render(); $('src').focus(); });
 
   // Teams送信先の登録QR
