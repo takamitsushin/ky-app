@@ -86,7 +86,7 @@
     <ol class="steps">
       <li>工事指示書の「QR用」セルを選んでコピー（Ctrl+C）</li>
       <li>下の欄に貼り付け（Ctrl+V）</li>
-      <li>右に出たQRを、スマホのKYアプリで読み取る</li>
+      <li>右に出たQRを、スマホのカメラで読む → KYアプリが開いて自動で入る</li>
     </ol>
     <textarea id="src" spellcheck="false" placeholder="KY1|受注番号|工事件名|作業内容|指定項目1;指定項目2"></textarea>
     <div class="row">
@@ -102,6 +102,7 @@
     <div class="qr-box">
       <div class="qr" id="qr">左の欄に貼り付けると、ここにQRコードが出ます</div>
       <p class="meta" id="meta"></p>
+      <a class="meta" id="openLink" href="#" target="_blank" rel="noopener" hidden>このQRの行き先をPCで開いて確かめる</a>
     </div>
   </section>
 </main>
@@ -139,7 +140,16 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
   const $ = (id) => document.getElementById(id);
   const SAMPLE = 'KY1|B-1234|テストビル LAN配線工事|2階天井内のケーブル敷設|作業エリアをカラーコーンで区画する;入館時に守衛室で受付する;作業開始・終了を担当者に連絡する';
 
-  function utf8Length(s) { return new TextEncoder().encode(s).length; }
+  // QRの中身は「KYアプリのアドレス#o=指示書の内容」。スマホのカメラで読むとアプリが開いて自動で入る。
+  // 「#」より後ろはサーバーに送られないので、指示書の内容はGitHubに渡らない
+  const APP_URL = 'https://takamitsushin.github.io/ky-app/';
+
+  // 文字 → UTF-8 → base64url（アドレスに入れられる英数字だけの形）
+  function toBase64Url(str) {
+    let bin = '';
+    new TextEncoder().encode(str).forEach((b) => { bin += String.fromCharCode(b); });
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
 
   function setStatus(kind, msg) {
     const el = $('status');
@@ -176,6 +186,7 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
     box.classList.remove('has-code');
     box.textContent = msg;
     $('meta').textContent = '';
+    $('openLink').hidden = true;
   }
 
   function render() {
@@ -199,12 +210,11 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
 
     // 読み取ったあとに整えた形でQRにする（前後の " や改行を除いたもの）
     const text = ['KY1', data.orderNo, data.projectName, data.workContent, data.clientItems.join(';')].join('|');
-    const bytes = utf8Length(text);
+    const url = `${APP_URL}#o=${toBase64Url(text)}`;
     let qr;
     try {
-      qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
       qr = qrcode(0, 'M');
-      qr.addData(text, 'Byte');
+      qr.addData(url, 'Byte');
       qr.make();
     } catch (e) {
       setStatus('err', '文字数が多すぎてQRコードにできません。作業内容や指定項目を短くしてください。');
@@ -214,12 +224,15 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
     const box = $('qr');
     box.classList.add('has-code');
     box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
-    $('meta').textContent = `${text.length}文字（${bytes}バイト）・${qr.getModuleCount()}×${qr.getModuleCount()}マス`;
+    $('meta').textContent = `内容${text.length}文字・QR ${qr.getModuleCount()}×${qr.getModuleCount()}マス`;
+    $('openLink').href = url;
+    $('openLink').hidden = false;
 
-    if (bytes > 900) {
+    // 77マス（バージョン15）を超えると画面越しの読み取りが難しくなる
+    if (qr.getModuleCount() > 77) {
       setStatus('warn', 'QRコードが細かいため、スマホで読み取りにくいかもしれません。文字を減らすと読み取りやすくなります。');
     } else {
-      setStatus('ok', 'この内容がスマホに入ります。');
+      setStatus('ok', 'この内容がスマホに入ります。スマホのカメラで読むとKYアプリが開きます。');
     }
   }
 

@@ -506,8 +506,9 @@
   }
 
   // 指示書QR
-  // QRの中身の形式（事務所PC用 qr.html の parseOrder と同じ）
+  // 指示書の内容の形式（事務所PC用 qr.html の parseOrder と同じ）
   //   KY1|受注番号|工事件名|作業内容|指定項目1;指定項目2;…
+  // QRには「アプリのアドレス#o=（この文字をbase64urlにしたもの）」として入る
   function parseOrder(raw) {
     let s = String(raw).trim();
     // Excelからのコピーで前後に " が付くことがある
@@ -560,10 +561,30 @@
     video.hidden = true;
   }
 
+  // base64url（qr.html の toBase64Url で作った形）→ 文字
+  function fromBase64Url(s) {
+    let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const bin = atob(b64);
+    return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  }
+
+  // QRの中身がアプリのアドレス（…#o=…）なら、そこから指示書の内容を取り出す。
+  // 古い形（KY1|… の文字だけ）はそのまま返す
+  function orderTextFrom(raw) {
+    const m = String(raw).match(/#o=([A-Za-z0-9_-]+)/);
+    if (!m) return raw;
+    try {
+      return fromBase64Url(m[1]);
+    } catch (e) {
+      throw new Error('QRの中身の形が正しくありません');
+    }
+  }
+
   // 読み取った文字を取り込む。成功したら true
   function loadOrderText(text) {
     try {
-      applyOrder(parseOrder(text));
+      applyOrder(parseOrder(orderTextFrom(text)));
     } catch (e) {
       setScanMsg(`${e.message}。工事指示書のQRを写してください。`, true);
       return false;
@@ -801,8 +822,22 @@
     toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
   }
 
+  // スマホのカメラで指示書QRを読んで開いた場合（アドレスの #o= に指示書の内容が入っている）
+  function loadOrderFromAddress() {
+    if (!location.hash.startsWith('#o=')) return;
+    try {
+      applyOrder(parseOrder(orderTextFrom(location.hash)));
+      showToast('指示書を読み込みました');
+    } catch (e) {
+      showToast(`指示書を読み込めませんでした（${e.message}）`);
+    }
+    // 再読み込みで二重に入らないよう、アドレスから指示書の内容を外す
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+
   renderClientItems();
   renderMembers();
+  loadOrderFromAddress();
 </script>
 </body>
 </html>
