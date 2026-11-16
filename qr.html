@@ -118,12 +118,13 @@
     <div>
       <h2 id="h-teams">Teams送信先の登録（スマホごとに最初の1回だけ）</h2>
       <ol class="steps">
-        <li>Teamsで送信先のチャネル名を右クリック →「チャネルへのリンクを取得」でコピー</li>
+        <li>Teamsで送信先のチャネル名を右クリック（スマホは長押し）→「チャネルへのリンクを取得」でコピー</li>
         <li>下の欄に貼り付け（Ctrl+V）</li>
-        <li>右に出たQRを、スマホのカメラで読む → そのスマホに送信先が登録される</li>
+        <li>スマホで開いているときは「このスマホに登録する」を押す。PCのときは、出たQRをスマホのカメラで読む</li>
       </ol>
       <textarea id="teamsSrc" spellcheck="false" placeholder="https://teams.microsoft.com/l/channel/…"></textarea>
       <p class="status" id="teamsStatus" hidden></p>
+      <a class="btn btn-go" id="teamsGo" href="#" hidden>このスマホに登録する</a>
     </div>
     <div class="qr-box">
       <div class="qr" id="teamsQr">リンクを貼り付けると、ここに登録用のQRコードが出ます</div>
@@ -312,6 +313,7 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
   // リンクはこのページにもGitHubにも残らない（「#」より後ろはサーバーに送られない）
   // KYアプリ index.html の TEAMS_URL_RE と同じ
   const TEAMS_URL_RE = /^https:\/\/teams\.(microsoft\.com|cloud\.microsoft)\/l\/channel\/\S+$/;
+  const TEAMS_URL_IN_TEXT = /https:\/\/teams\.(?:microsoft\.com|cloud\.microsoft)\/l\/channel\/\S+/;
 
   function renderTeams() {
     const box = $('teamsQr');
@@ -319,12 +321,17 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
     const setTeamsStatus = (kind, msg) => { st.className = `status ${kind}`; st.textContent = msg; st.hidden = !msg; };
     const noQr = (msg) => { box.classList.remove('has-code'); box.textContent = msg; };
 
-    const link = $('teamsSrc').value.trim();
-    if (!link) {
+    const pasted = $('teamsSrc').value.trim();
+    $('teamsGo').hidden = true;
+    if (!pasted) {
       setTeamsStatus('', '');
       noQr('リンクを貼り付けると、ここに登録用のQRコードが出ます');
       return;
     }
+    // スマホのTeamsでコピーすると、先頭に「チャネル名 | 会社名 | Microsoft Teams」の行が付いてくる。
+    // 貼り付けた文字の中から、リンクの部分だけを取り出して使う
+    const found = pasted.match(TEAMS_URL_IN_TEXT);
+    const link = found ? found[0] : '';
     if (!TEAMS_URL_RE.test(link)) {
       setTeamsStatus('err', 'Teamsのチャネルのリンクではありません。「チャネルへのリンクを取得」でコピーしたものを貼り付けてください。');
       noQr('リンクを直すとQRコードが出ます');
@@ -342,7 +349,9 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
     }
     box.classList.add('has-code');
     box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
-    setTeamsStatus('ok', 'スマホのカメラで読むと、そのスマホにTeamsの送信先が登録されます。');
+    $('teamsGo').href = `${APP_URL}#t=${link}`;
+    $('teamsGo').hidden = false;
+    setTeamsStatus('ok', 'リンクを読み取りました。このスマホに登録するときは下のボタンを押します。別のスマホに登録するときは、QRをそのスマホのカメラで読みます。');
   }
 
   $('teamsSrc').addEventListener('input', renderTeams);

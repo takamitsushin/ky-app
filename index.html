@@ -940,10 +940,14 @@
   // 読み取った文字に #t=（Teamsのリンク）があれば保存して true。なければ false
   function saveTeamsUrlFrom(raw) {
     const m = String(raw).match(/#t=(\S+)/);
-    if (!m) return false;
-    if (!TEAMS_URL_RE.test(m[1])) throw new Error('Teamsのチャネルのリンクではありません');
+    // #t= が無くても、Teamsでコピーした文字（先頭に「チャネル名 | 会社名 | Microsoft Teams」の行が付く）を
+    // そのまま貼られた場合は、リンクの部分だけを取り出して登録する
+    const direct = m ? null : String(raw).match(/https:\/\/teams\.(?:microsoft\.com|cloud\.microsoft)\/l\/channel\/\S+/);
+    if (!m && !direct) return false;
+    const url = m ? m[1] : direct[0];
+    if (!TEAMS_URL_RE.test(url)) throw new Error('Teamsのチャネルのリンクではありません');
     try {
-      localStorage.setItem(TEAMS_KEY, m[1]);
+      localStorage.setItem(TEAMS_KEY, url);
     } catch (e) {
       throw new Error('このスマホに保存できませんでした');
     }
