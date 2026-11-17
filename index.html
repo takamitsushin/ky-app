@@ -320,6 +320,16 @@
   .rating.low { background: var(--done-bg); color: var(--done); border-left-color: var(--done); }
   .rating.mid { background: #fff7d6; color: #8a5a00; border-left-color: #d9a400; }
   .rating.high { background: var(--error-bg); color: var(--error); border-left-color: var(--error); }
+  /* 入力の補完（1件目だけ） */
+  .suggest { margin-top: 8px; display: grid; gap: 6px; }
+  .suggest[hidden] { display: none; }
+  .suggest-head { margin: 0; font-size: 14px; color: var(--muted); }
+  .suggest-item {
+    min-height: 48px; padding: 8px 12px; text-align: left;
+    border: 2px dashed var(--primary); border-radius: 8px; background: #f3f7fb;
+    font-size: 16px; line-height: 1.4; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .suggest-item:active { background: #e3edf7; }
   #addPoint { width: 100%; }
   #addPoint[hidden] { display: none; }
   /* 入力の引き継ぎ（スマホに送る・入力をクリア） */
@@ -732,21 +742,20 @@
   }
 
   // 危険のポイントの必要件数。
-  // いちばん高い危険度（低=1・中=2・高=3）が基本。次のどれかに当てはまれば +1（上限4）：
-  //   危険度「高」の種別が2つ以上 ／ 屋外で悪天候 ／ combos の条件に当てはまる
+  //   ・ひとり作業（参加者が1人）は、作業種別に関係なく1件
+  //   ・それ以外は、選んだ作業種別のうちいちばん高い危険度（低=1・中=2・高=3）
+  // 天気や組み合わせ（combos）では増やさない（参考例に出すだけ）。4件目はいつも任意。
+  // 件数は rules.json の requiredPoints（solo＝ひとり作業の件数、max＝必須の上限）で変えられる
   function requiredPoints(cond) {
     if (!rules || cond.types.length === 0) return 1;
+    const conf = rules.requiredPoints || {};
+    if (cond.people === 1) return Math.max(1, Number(conf.solo) || 1);
     const levels = cond.types.map((t) => Number(rules.dangerLevel[t]) || 1);
-    const base = Math.min(3, Math.max(1, ...levels));
-    const badWeather = rules.extraPointWeather || ['雨', '強風', '雪・凍結'];
-    const plus = levels.filter((l) => l >= 3).length >= 2
-      || (!!cond.weather && badWeather.includes(cond.weather))
-      || (rules.combos || []).some((c) => comboMatches(c, cond));
-    return Math.min(4, base + (plus ? 1 : 0));
+    return Math.min(Math.max(1, Number(conf.max) || 3), Math.max(1, ...levels));
   }
 
-  // 参考例。優先順：組み合わせ → 作業種別 → 人数 → 天気 → 季節。最大8件
-  function exampleItems(cond) {
+  // 参考例。優先順：組み合わせ → 作業種別 → 人数 → 天気 → 季節。最大8件（補完では limit を大きくして全部使う）
+  function exampleItems(cond, limit = 8) {
     if (!rules) return [];
     const out = [];
     const add = (items) => (items || []).forEach((it) => {
@@ -760,7 +769,66 @@
     Object.keys(rules.people || {}).forEach((k) => { if (peopleMatch(k, cond.people)) add(rules.people[k]); });
     if (cond.weather) add(rules.weather && rules.weather[cond.weather]);
     add(rules.season && rules.season[cond.season]);
-    return out.slice(0, 8);
+    return out.slice(0, limit);
+  }
+
+  // ---- 入力の補完（1件目だけ） ----
+  // 入力した文字に合う文を、欄の下に候補として出す。押すとその文が欄に入る。
+  // 候補のもと：rules.json の参考例（when／risk／action）と、この端末で前に入力した文。
+  // サーバーやAIは使わない。前に入力した文は、この端末の中（localStorage）だけに残す
+  const HISTORY_KEY = 'ky.history';
+  const HISTORY_MAX = 30; // 欄ごとに覚えておく件数
+  const EXAMPLE_FIELD = { when: 'when', what: 'risk', action: 'action' }; // 入力欄 → 参考例のどの文か
+
+  function loadHistory() {
+    try {
+      const h = JSON.parse(localStorage.getItem(HISTORY_KEY));
+      if (h && typeof h === 'object') return h;
+    } catch (e) { /* 壊れていたら無いものとして扱う */ }
+    return {};
+  }
+
+  // 確認画面まで進めた入力を、次回の候補として覚える
+  function rememberPoints() {
+    const h = loadHistory();
+    activePoints().forEach(({ p }) => ['when', 'what', 'action'].forEach((k) => {
+      const t = p[k].trim();
+      if (!t) return;
+      const list = (Array.isArray(h[k]) ? h[k] : []).filter((x) => x !== t);
+      list.unshift(t);
+      h[k] = list.slice(0, HISTORY_MAX);
+    }));
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch (e) { /* 覚えられなくても続ける */ }
+  }
+
+  function everyExampleItem() {
+    const out = [];
+    const add = (items) => (items || []).forEach((it) => { if (it && it.risk) out.push(it); });
+    (rules.combos || []).forEach((c) => add(c.items));
+    ['workTypes', 'people', 'weather', 'season'].forEach((g) => Object.values(rules[g] || {}).forEach(add));
+    return out;
+  }
+
+  // 1件目の欄（key = when／what／action）に出す候補。最大4件
+  function suggestionsFor(key, typed) {
+    if (!rules || !points[0]) return [];
+    const q = typed.trim();
+    const field = EXAMPLE_FIELD[key];
+    // 今の条件（作業種別・人数・天気・季節）に合う例を先に、そのあとにほかの例
+    const items = exampleItems(conditions(), 999).concat(everyExampleItem());
+    const out = [];
+    const push = (t) => { if (typeof t === 'string' && t && t !== q && !out.includes(t)) out.push(t); };
+    // 前の欄で例文を選んでいたら、その続き（同じ例の次の文）を最初に出す。これは何も打たなくても出す
+    const prev = key === 'what' ? ['when', points[0].when.trim()] : key === 'action' ? ['risk', points[0].what.trim()] : null;
+    if (prev && prev[1]) items.forEach((it) => { if (it[prev[0]] === prev[1]) push(it[field]); });
+    if (q) {
+      const hist = loadHistory()[key];
+      const pool = (Array.isArray(hist) ? hist : []).concat(items.map((it) => it[field]));
+      // 打った文字で始まる文を先に、次に途中に含む文
+      pool.filter((t) => typeof t === 'string' && t.startsWith(q)).forEach(push);
+      pool.filter((t) => typeof t === 'string' && t.includes(q)).forEach(push);
+    }
+    return out.slice(0, 4);
   }
 
   // 参考例は読むだけ。押しても入力欄には入らない（自分の言葉で書いてもらうため）
@@ -839,6 +907,39 @@
     err.className = 'error-msg';
     err.textContent = 'ここを入れてください';
     f.append(label, ta, err);
+    if (i === 0) {
+      // 1件目だけ、入力した文字に合う候補を欄の下に出す
+      const box = document.createElement('div');
+      box.className = 'suggest';
+      box.hidden = true;
+      const show = () => {
+        const list = suggestionsFor(key, ta.value);
+        box.innerHTML = '';
+        box.hidden = list.length === 0;
+        if (list.length === 0) return;
+        const head = document.createElement('p');
+        head.className = 'suggest-head';
+        head.textContent = '候補（押すと入ります。入れたあと直せます）';
+        box.appendChild(head);
+        list.forEach((text) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'suggest-item';
+          b.textContent = text;
+          b.addEventListener('click', () => {
+            ta.value = text;
+            points[0][key] = text;
+            f.classList.remove('has-error');
+            box.hidden = true;
+            scheduleSave();
+          });
+          box.appendChild(b);
+        });
+      };
+      ta.addEventListener('input', show);
+      ta.addEventListener('focus', show);
+      ta.after(box);
+    }
     return f;
   }
 
@@ -934,7 +1035,7 @@
     while (points.length > requiredCount && !points[points.length - 1].manual && pointEmpty(points[points.length - 1])) points.pop();
     $('pointNeed').textContent = cond.types.length === 0
       ? '作業種別を選ぶと、必要な件数が決まります（最低1件）。'
-      : `この作業では、危険のポイントが ${requiredCount}件 必要です（${MAX_POINTS}件まで追加できます）。`;
+      : `${cond.people === 1 ? 'ひとり作業のため' : 'この作業では'}、危険のポイントが ${requiredCount}件 必要です（${MAX_POINTS}件まで追加できます）。`;
     renderPoints();
     renderExamples(cond);
     scheduleSave();
@@ -1360,6 +1461,8 @@
   }
 
   function openSummary() {
+    // ここまで進めた危険のポイントの文を、次回の補完の候補として覚える
+    if (!$('customerSheet').checked) rememberPoints();
     const { rows } = summaryRows();
     const dl = $('summary');
     dl.innerHTML = '';
