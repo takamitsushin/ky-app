@@ -133,10 +133,10 @@
     text-align: center; font-size: 15px; font-weight: 700;
     background: #e5e7eb; color: var(--muted);
   }
-  .client-item .state::before { content: "未実施"; }
+  .client-item .state::before { content: "未確認"; }
   .client-item input:checked + span { border-color: var(--done); background: var(--done-bg); }
   .client-item input:checked + span .state { background: var(--done); color: #fff; }
-  .client-item input:checked + span .state::before { content: "✓ 実施済み"; }
+  .client-item input:checked + span .state::before { content: "✓ 確認済み"; }
   .client-item input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
   .client-progress { font-size: 15px; color: var(--muted); font-weight: 400; margin-left: 6px; }
   .warn { margin: 16px 0 0; padding: 10px 12px; background: var(--error-bg); color: var(--error); border-radius: 8px; font-size: 15px; font-weight: 700; }
@@ -181,7 +181,7 @@
   .paste-block { margin-top: 16px; padding-top: 12px; border-top: 2px dashed var(--line); }
   .paste-block .textarea { min-height: 88px; font-size: 16px; word-break: break-all; }
   .paste-block .btn { width: 100%; margin-top: 8px; }
-  .dlg-foot .btn + .btn { margin-top: 8px; }
+  .dlg-foot .btn + .btn, .dlg-foot #closeDialog { margin-top: 8px; }
 
   /* 参加者 */
   .add-row { display: flex; gap: 8px; }
@@ -277,6 +277,53 @@
     opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none;
   }
   .toast.show { opacity: 1; transform: none; }
+
+  /* 1つだけ選ぶパネル（屋内/屋外・天気）は印を丸にする */
+  .hazard.radio span::before { border-radius: 50%; }
+  .hazard.radio input:checked + span::before { background-image: none; box-shadow: inset 0 0 0 4px #fff; }
+
+  /* rules.json を読めなかったとき */
+  .rules-msg { margin-bottom: 16px; padding: 12px; border-radius: var(--radius); background: var(--error-bg); color: var(--error); font-weight: 700; }
+  .rules-msg[hidden] { display: none; }
+  .rules-msg p { margin: 0 0 10px; }
+
+  /* 危険のポイント */
+  .point-need { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: #e3edf7; font-weight: 700; font-size: 16px; }
+  .examples { margin-bottom: 16px; border: 2px solid var(--line); border-radius: 10px; background: #fafbfc; }
+  .examples summary { min-height: var(--tap); padding: 14px; font-weight: 700; color: var(--primary); cursor: pointer; }
+  .examples .hint { margin: 0; padding: 0 14px 8px; }
+  .examples ul { list-style: none; margin: 0; padding: 0 14px 6px; }
+  .examples li { padding: 10px 0; border-top: 1px solid var(--line); font-size: 16px; }
+  .examples li strong { display: block; }
+  .examples li span { display: block; color: var(--muted); font-size: 15px; }
+  .point { margin-bottom: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 10px; }
+  .point-head { display: flex; align-items: center; gap: 4px; margin-bottom: 12px; }
+  .point-no { font-size: 19px; font-weight: 700; }
+  .opt { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 13px; font-weight: 700; border-radius: 4px; background: #e5e7eb; color: var(--muted); }
+  .point-del { margin-left: auto; min-height: 44px; padding: 0 12px; border: 2px solid var(--line); border-radius: 8px; background: #fff; color: var(--muted); font-weight: 700; font-size: 15px; cursor: pointer; }
+  .point-text { min-height: 72px; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .seg-item { position: relative; display: block; }
+  .seg-item input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .seg-item span {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 68px; padding: 6px 4px; text-align: center;
+    border: 2px solid var(--line); border-radius: 10px; background: #fff;
+    font-size: 15px; font-weight: 700; line-height: 1.3;
+    user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  .seg-item span b { font-size: 22px; }
+  .seg-item input:checked + span { border-color: var(--primary); border-width: 3px; background: #e3edf7; color: var(--primary); }
+  .seg-item input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .has-error .seg { outline: 2px solid var(--error); outline-offset: 4px; border-radius: 8px; }
+  .rating { margin: 0 0 18px; padding: 10px 12px; border-radius: 8px; font-weight: 700; background: #e5e7eb; color: var(--muted); border-left: 6px solid #9aa3ad; }
+  .rating.low { background: var(--done-bg); color: var(--done); border-left-color: var(--done); }
+  .rating.mid { background: #fff7d6; color: #8a5a00; border-left-color: #d9a400; }
+  .rating.high { background: var(--error-bg); color: var(--error); border-left-color: var(--error); }
+  #addPoint { width: 100%; }
+  #addPoint[hidden] { display: none; }
+  /* 確認画面：評価が「大きい」の件 */
+  .dlg-body dd.risk-high { padding: 8px 10px; border-left: 6px solid var(--error); background: var(--error-bg); border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -315,68 +362,39 @@
       </div>
 
       <div class="field">
-        <label class="label" for="workContent">作業内容</label>
-        <textarea class="textarea" id="workContent" name="workContent" placeholder="例：2階天井内のケーブル敷設"></textarea>
-      </div>
-
-      <div class="field">
         <label class="sheet-toggle">
           <input type="checkbox" id="customerSheet" name="customerSheet">
           <span>お客様指定の用紙でKYを実施した</span>
         </label>
-        <p class="sheet-note" id="sheetNote" hidden>この画面での危険のポイント・対策・重点項目・参加者の入力は不要です。案件名と作業日だけ入れてください。</p>
+        <p class="sheet-note" id="sheetNote" hidden>この画面でのKYの入力（作業種別・参加者・危険のポイントなど）は不要です。案件名と作業日だけ入れてください。</p>
       </div>
     </section>
 
-    <section class="card" aria-labelledby="h-hazard" data-ky-section>
-      <h2 id="h-hazard">危険のポイント</h2>
-      <div class="field" data-field="hazards">
-        <span class="label" id="hazard-label">当てはまるものを全部押す<span class="req">必須</span></span>
-        <div class="hazards" role="group" aria-labelledby="hazard-label">
-          <label class="hazard"><input type="checkbox" name="hazards" value="高所"><span>高所</span></label>
-          <label class="hazard"><input type="checkbox" name="hazards" value="感電"><span>感電</span></label>
-          <label class="hazard"><input type="checkbox" name="hazards" value="活線"><span>活線</span></label>
-          <label class="hazard"><input type="checkbox" name="hazards" value="道路上"><span>道路上</span></label>
-          <label class="hazard"><input type="checkbox" name="hazards" value="脚立"><span>脚立</span></label>
-          <label class="hazard"><input type="checkbox" name="hazards" value="重量物"><span>重量物</span></label>
-          <label class="hazard hazard-other"><input type="checkbox" name="hazards" value="その他" id="hazardOther"><span>その他</span></label>
-        </div>
-        <p class="error-msg">危険のポイントを1つ以上選んでください</p>
-        <div class="other-box" id="otherBox" hidden>
-          <label class="label" for="hazardOtherText">その他の内容</label>
-          <input class="input" id="hazardOtherText" name="hazardOtherText" type="text" autocomplete="off" placeholder="例：狭所作業">
-        </div>
-      </div>
+    <!-- rules.json を読めなかったときだけ出る -->
+    <div class="rules-msg" id="rulesMsg" hidden>
+      <p id="rulesMsgText"></p>
+      <button class="btn btn-ghost" type="button" id="rulesRetry">もう一度読み込む</button>
+    </div>
 
-      <div class="client-block">
-        <span class="label" id="client-label">受注先の指定項目<span class="client-progress" id="clientProgress"></span></span>
-        <span class="hint">対策をやったら押して「実施済み」にする</span>
-        <span class="hint" id="clientSource">今は仮の項目です。指示書QRを読むと、その案件の項目に置き換わります。</span>
-        <!-- 指示書QRから受け取る。読むまでは試作用の仮項目を表示 -->
-        <ul class="client-list" id="clientList" aria-labelledby="client-label" style="margin-top:10px"></ul>
+    <section class="card" aria-labelledby="h-work">
+      <h2 id="h-work">作業</h2>
+      <div class="field" data-field="workTypes" data-ky-section>
+        <span class="label" id="worktype-label">作業種別<span class="req">必須</span></span>
+        <span class="hint" style="margin:0 0 8px">当てはまるものを全部押す</span>
+        <!-- 中身は rules.json の dangerLevel から作る -->
+        <div class="hazards" id="workTypeList" role="group" aria-labelledby="worktype-label"></div>
+        <p class="error-msg">作業種別を1つ以上選んでください</p>
       </div>
-    </section>
-
-    <section class="card" aria-labelledby="h-measure" data-ky-section>
-      <h2 id="h-measure">対策</h2>
       <div class="field">
-        <label class="label" for="measures">危険に対してどうするか</label>
-        <textarea class="textarea" id="measures" name="measures" placeholder="例：安全帯を必ず使用する／検電してから作業する"></textarea>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="h-focus" data-ky-section>
-      <h2 id="h-focus">重点項目</h2>
-      <div class="field">
-        <label class="label" for="focusItem">今日いちばん気をつけること</label>
-        <input class="input" id="focusItem" name="focusItem" type="text" autocomplete="off" placeholder="例：脚立は2人作業、ヨシ！">
+        <label class="label" for="workContent">具体的な作業内容</label>
+        <textarea class="textarea" id="workContent" name="workContent" placeholder="例：2階天井内のケーブル敷設"></textarea>
       </div>
     </section>
 
     <section class="card" aria-labelledby="h-members" data-ky-section>
       <h2 id="h-members">参加者<span class="count" id="memberCount">0名</span></h2>
       <div class="field" data-field="members">
-        <!-- 名簿はアプリに埋め込まない方針のため手入力（日報の「氏名」と同じ値） -->
+        <!-- 名簿はアプリに埋め込まない方針のため手入力（日報の「氏名」と同じ値）。人数はここから自動で数える -->
         <label class="label" for="memberInput">名前を入れて「追加」<span class="req">必須</span></label>
         <div class="add-row">
           <input class="input" id="memberInput" type="text" autocomplete="off" enterkeyhint="done" placeholder="例：山田">
@@ -385,6 +403,54 @@
         <p class="error-msg">参加者を1人以上追加してください</p>
         <ul class="chips" id="memberList" aria-label="参加者一覧"></ul>
         <p class="empty" id="memberEmpty">まだ誰も追加されていません</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-place" data-ky-section>
+      <h2 id="h-place">作業場所</h2>
+      <div class="field" data-field="place">
+        <span class="label" id="place-label">屋内か屋外か<span class="req">必須</span></span>
+        <div class="hazards" role="radiogroup" aria-labelledby="place-label">
+          <label class="hazard radio"><input type="radio" name="place" value="屋内"><span>屋内</span></label>
+          <label class="hazard radio"><input type="radio" name="place" value="屋外"><span>屋外</span></label>
+        </div>
+        <p class="error-msg">屋内か屋外かを選んでください</p>
+      </div>
+      <!-- 屋外のときだけ出す。中身は rules.json の weather から作る -->
+      <div class="field" data-field="weather" id="weatherField" hidden>
+        <span class="label" id="weather-label">天気<span class="req">必須</span></span>
+        <div class="hazards" id="weatherList" role="radiogroup" aria-labelledby="weather-label"></div>
+        <p class="error-msg">天気を選んでください</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-pre" data-ky-section>
+      <h2 id="h-pre">作業前確認事項<span class="count" id="preProgress"></span></h2>
+      <div class="field" data-field="preChecks">
+        <span class="hint" style="margin:0 0 10px">確認したら押して「確認済み」にする（全部必須）</span>
+        <!-- 中身は rules.json の preChecks から作る -->
+        <ul class="client-list" id="preCheckList" aria-labelledby="h-pre"></ul>
+        <p class="error-msg">全部の項目を確認してください</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-points" data-ky-section>
+      <h2 id="h-points">危険のポイント</h2>
+      <p class="point-need" id="pointNeed"></p>
+      <details class="examples" id="examples">
+        <summary>参考例を見る</summary>
+        <p class="hint">読むだけの例です。自分の現場に合わせて、自分の言葉で書いてください。</p>
+        <ul id="exampleList"></ul>
+      </details>
+      <div id="pointList"></div>
+      <button class="btn btn-ghost" type="button" id="addPoint">＋ 危険のポイントを追加</button>
+    </section>
+
+    <section class="card" aria-labelledby="h-focus" data-ky-section>
+      <h2 id="h-focus">本日の安全目標</h2>
+      <div class="field">
+        <label class="label" for="focusItem">今日いちばん気をつけること</label>
+        <input class="input" id="focusItem" name="focusItem" type="text" autocomplete="off" placeholder="例：脚立は2人作業、ヨシ！">
       </div>
     </section>
 
@@ -405,7 +471,6 @@
   <div class="dlg-head"><h2 id="dlg-title">入力内容の確認</h2></div>
   <div class="dlg-body">
     <dl id="summary"></dl>
-    <p class="warn" id="clientWarn" hidden></p>
     <p class="note">試作版のため、内容は保存されません。</p>
   </div>
   <div class="dlg-foot">
@@ -465,39 +530,88 @@
     $('workDate').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   })();
 
-  // 「その他」を選んだときだけ内容欄を出す
-  $('hazardOther').addEventListener('change', (e) => {
-    $('otherBox').hidden = !e.target.checked;
-    if (e.target.checked) $('hazardOtherText').focus();
-  });
-
   // お客様指定の用紙で実施した場合は、KYの各欄を隠して入力不要にする（入れた内容は残す）
   $('customerSheet').addEventListener('change', (e) => {
     const on = e.target.checked;
     form.querySelectorAll('[data-ky-section]').forEach((sec) => { sec.hidden = on; });
     $('sheetNote').hidden = !on;
-    if (on) ['hazards', 'members'].forEach(clearError);
+    if (on) form.querySelectorAll('.has-error').forEach((el) => el.classList.remove('has-error'));
+    updateRulesMsg();
   });
 
-  // 受注先の指定項目（指示書QRから受け取る。読むまでは試作用の仮項目）
-  let clientItems = [
-    '作業エリアをカラーコーンで区画する',
-    '作業開始・終了を受注先の担当者に連絡する',
-    'ヘルメット・安全靴・保護手袋を着用する',
-  ];
+  // ---- ルール（rules.json） ----
+  // 作業種別・危険度・作業前確認事項・参考例などは rules.json に分けてある（プログラムを触らずに直せる）。
+  // 電波が無い場所でも使えるよう、最後に読めた内容をこのスマホに控えておく
+  const RULES_KEY = 'ky.rules';
+  // rules.json に riskScale が無いときの控え
+  const DEFAULT_SCALE = {
+    likelihood: { 1: 'ごくまれ', 2: 'ときには', 3: 'ありがち' },
+    severity: { 1: '軽症～不休', 2: '中度～休業', 3: '重度～死亡' },
+    rating: [{ max: 3, label: '小さい' }, { max: 4, label: '中程度' }, { max: 6, label: '大きい' }],
+  };
+  let rules = null;
 
-  function renderClientItems() {
-    const list = $('clientList');
+  function validRules(r) {
+    return !!r && typeof r === 'object' && !!r.dangerLevel && Object.keys(r.dangerLevel).length > 0;
+  }
+
+  async function loadRules() {
+    let loaded = null;
+    try {
+      const res = await fetch('rules.json', { cache: 'no-cache' });
+      if (res.ok) loaded = await res.json();
+    } catch (e) { /* 下で控えを使う */ }
+    if (validRules(loaded)) {
+      try { localStorage.setItem(RULES_KEY, JSON.stringify(loaded)); } catch (e) { /* 控えられなくても続ける */ }
+    } else {
+      loaded = null;
+      try {
+        const saved = JSON.parse(localStorage.getItem(RULES_KEY));
+        if (validRules(saved)) loaded = saved;
+      } catch (e) { /* 控えも無い */ }
+    }
+    rules = loaded;
+    renderRuleParts();
+  }
+
+  function updateRulesMsg() {
+    $('rulesMsg').hidden = !!rules || $('customerSheet').checked;
+    $('rulesMsgText').textContent = 'ルール（rules.json）を読み込めませんでした。電波の良い場所で「もう一度読み込む」を押してください。';
+  }
+  $('rulesRetry').addEventListener('click', loadRules);
+
+  // 押して選ぶパネルを作る（選んであったものは選んだままにする）
+  function buildChoices(box, type, name, values) {
+    const keep = new Set([...box.querySelectorAll('input:checked')].map((el) => el.value));
+    box.innerHTML = '';
+    values.forEach((v) => {
+      const label = document.createElement('label');
+      label.className = type === 'radio' ? 'hazard radio' : 'hazard';
+      const input = document.createElement('input');
+      input.type = type;
+      input.name = name;
+      input.value = v;
+      input.checked = keep.has(v);
+      const span = document.createElement('span');
+      span.textContent = v;
+      label.append(input, span);
+      box.appendChild(label);
+    });
+  }
+
+  function renderPreChecks() {
+    const list = $('preCheckList');
+    const keep = new Set([...list.querySelectorAll('input:checked')].map((el) => el.value));
     list.innerHTML = '';
-    clientItems.forEach((text, i) => {
+    ((rules && rules.preChecks) || []).forEach((text) => {
       const li = document.createElement('li');
       const label = document.createElement('label');
       label.className = 'client-item';
       const cb = document.createElement('input');
       cb.type = 'checkbox';
-      cb.name = 'clientDone';
-      cb.value = String(i);
-      cb.addEventListener('change', updateClientProgress);
+      cb.name = 'preCheck';
+      cb.value = text;
+      cb.checked = keep.has(text);
       const box = document.createElement('span');
       const t = document.createElement('span');
       t.className = 'text';
@@ -510,24 +624,299 @@
       li.appendChild(label);
       list.appendChild(li);
     });
-    if (clientItems.length === 0) {
+    updatePreProgress();
+  }
+
+  function preCheckBoxes() { return [...form.querySelectorAll('input[name="preCheck"]')]; }
+  function allPreChecked() {
+    const boxes = preCheckBoxes();
+    return boxes.length > 0 && boxes.every((el) => el.checked);
+  }
+  function updatePreProgress() {
+    const boxes = preCheckBoxes();
+    $('preProgress').textContent = boxes.length ? `${boxes.filter((el) => el.checked).length}／${boxes.length} 確認済み` : '';
+  }
+
+  // rules.json の内容で、作業種別・天気・作業前確認事項の選択肢を作り直す
+  function renderRuleParts() {
+    buildChoices($('workTypeList'), 'checkbox', 'workTypes', rules ? Object.keys(rules.dangerLevel) : []);
+    buildChoices($('weatherList'), 'radio', 'weather', rules && rules.weather ? Object.keys(rules.weather) : []);
+    renderPreChecks();
+    updateRulesMsg();
+    refreshPoints();
+  }
+
+  // ---- 条件（作業種別・人数・屋内外・天気・季節） ----
+  function checkedValues(name) {
+    return [...form.querySelectorAll(`input[name="${name}"]:checked`)].map((el) => el.value);
+  }
+
+  // 季節は入力させず、端末の日付から決める
+  function currentSeason() {
+    const m = new Date().getMonth() + 1;
+    if (m >= 6 && m <= 9) return '夏';
+    if (m === 12 || m <= 2) return '冬';
+    if (m <= 5) return '春';
+    return '秋';
+  }
+
+  function conditions() {
+    const place = checkedValues('place')[0] || '';
+    return {
+      types: checkedValues('workTypes'),
+      people: members.length, // 人数は参加者の数から自動
+      place,
+      weather: place === '屋外' ? (checkedValues('weather')[0] || '') : '', // 天気は屋外のときだけ使う
+      season: currentSeason(),
+    };
+  }
+
+  function updateWeatherField() {
+    $('weatherField').hidden = checkedValues('place')[0] !== '屋外';
+  }
+
+  // rules.json の人数の書き方：「1」＝ちょうど1人、「2+」＝2人以上
+  function peopleMatch(key, n) {
+    const num = parseInt(key, 10);
+    if (!num || !n) return false;
+    return String(key).endsWith('+') ? n >= num : n === num;
+  }
+
+  function comboMatches(combo, cond) {
+    const when = (combo && combo.when) || {};
+    const keys = Object.keys(when);
+    return keys.length > 0 && keys.every((k) => {
+      if (k === 'workType') return cond.types.includes(when[k]);
+      if (k === 'season') return cond.season === when[k];
+      if (k === 'weather') return cond.weather === when[k];
+      if (k === 'people') return peopleMatch(when[k], cond.people);
+      return false;
+    });
+  }
+
+  // 危険のポイントの必要件数。
+  // いちばん高い危険度（低=1・中=2・高=3）が基本。次のどれかに当てはまれば +1（上限4）：
+  //   危険度「高」の種別が2つ以上 ／ 屋外で悪天候 ／ combos の条件に当てはまる
+  function requiredPoints(cond) {
+    if (!rules || cond.types.length === 0) return 1;
+    const levels = cond.types.map((t) => Number(rules.dangerLevel[t]) || 1);
+    const base = Math.min(3, Math.max(1, ...levels));
+    const badWeather = rules.extraPointWeather || ['雨', '強風', '雪・凍結'];
+    const plus = levels.filter((l) => l >= 3).length >= 2
+      || (!!cond.weather && badWeather.includes(cond.weather))
+      || (rules.combos || []).some((c) => comboMatches(c, cond));
+    return Math.min(4, base + (plus ? 1 : 0));
+  }
+
+  // 参考例。優先順：組み合わせ → 作業種別 → 人数 → 天気 → 季節。最大8件
+  function exampleItems(cond) {
+    if (!rules) return [];
+    const out = [];
+    const add = (items) => (items || []).forEach((it) => {
+      if (it && it.risk && !out.some((o) => o.risk === it.risk)) out.push(it);
+    });
+    (rules.combos || []).filter((c) => comboMatches(c, cond)).forEach((c) => add(c.items));
+    // 作業種別は、選んだ種別から1件ずつ順番に取る（1つの種別だけで埋まらないように）
+    const lists = cond.types.map((t) => (rules.workTypes && rules.workTypes[t]) || []);
+    const longest = Math.max(0, ...lists.map((l) => l.length));
+    for (let i = 0; i < longest; i++) lists.forEach((l) => { if (l[i]) add([l[i]]); });
+    Object.keys(rules.people || {}).forEach((k) => { if (peopleMatch(k, cond.people)) add(rules.people[k]); });
+    if (cond.weather) add(rules.weather && rules.weather[cond.weather]);
+    add(rules.season && rules.season[cond.season]);
+    return out.slice(0, 8);
+  }
+
+  // 参考例は読むだけ。押しても入力欄には入らない（自分の言葉で書いてもらうため）
+  function renderExamples(cond) {
+    const list = $('exampleList');
+    list.innerHTML = '';
+    const items = exampleItems(cond);
+    if (items.length === 0) {
       const li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = 'この案件には指定項目がありません';
+      li.textContent = '作業種別を選ぶと、ここに例が出ます';
       list.appendChild(li);
+      return;
     }
-    updateClientProgress();
+    items.forEach((it) => {
+      const li = document.createElement('li');
+      const risk = document.createElement('strong');
+      risk.textContent = it.risk;
+      li.appendChild(risk);
+      if (it.action) {
+        const act = document.createElement('span');
+        act.textContent = `対策の例：${it.action}`;
+        li.appendChild(act);
+      }
+      list.appendChild(li);
+    });
   }
 
-  function clientDoneFlags() {
-    const checked = new Set([...form.querySelectorAll('input[name="clientDone"]:checked')].map((el) => Number(el.value)));
-    return clientItems.map((_, i) => checked.has(i));
+  // ---- 危険のポイント（1〜4件） ----
+  // 1件 = どのようなときに／起こりうること／可能性／重大性／対策。manual は「追加」ボタンで足した件
+  let points = [];
+  let requiredCount = 1;
+  const MAX_POINTS = 4;
+  const newPoint = (manual) => ({ when: '', what: '', likelihood: 0, severity: 0, action: '', manual: !!manual });
+  const pointEmpty = (p) => !p.when.trim() && !p.what.trim() && !p.action.trim() && !p.likelihood && !p.severity;
+
+  // 評価点 = 可能性 + 重大性。区切りと呼び名は rules.json の riskScale.rating
+  function rating(p) {
+    if (!p.likelihood || !p.severity) return null;
+    const score = p.likelihood + p.severity;
+    const scale = (rules && rules.riskScale && rules.riskScale.rating) || DEFAULT_SCALE.rating;
+    let idx = scale.findIndex((r) => score <= r.max);
+    if (idx < 0) idx = scale.length - 1;
+    const level = idx === 0 ? 'low' : idx === scale.length - 1 ? 'high' : 'mid';
+    return { score, label: scale[idx].label, level };
   }
 
-  function updateClientProgress() {
-    const done = clientDoneFlags().filter(Boolean).length;
-    $('clientProgress').textContent = `${done}／${clientItems.length} 実施済み`;
+  function scaleLabels(kind) {
+    return (rules && rules.riskScale && rules.riskScale[kind]) || DEFAULT_SCALE[kind];
   }
+
+  // 色だけに頼らず、必ず文字でも出す
+  function paintRating(el, p) {
+    const r = rating(p);
+    el.className = `rating${r ? ` ${r.level}` : ''}`;
+    el.textContent = r ? `評価：${r.label}（${r.score}点）` : '評価：可能性と重大性を選ぶと出ます';
+  }
+
+  // 文字の欄。スマホの音声入力（キーボードのマイク）がそのまま使えるよう、入力の制限はかけない
+  function pointTextField(i, key, labelText, placeholder) {
+    const f = document.createElement('div');
+    f.className = 'field';
+    f.dataset.field = `p${i}-${key}`;
+    const id = `p${i}-${key}-in`;
+    const label = document.createElement('label');
+    label.className = 'label';
+    label.htmlFor = id;
+    label.textContent = labelText;
+    const ta = document.createElement('textarea');
+    ta.className = 'textarea point-text';
+    ta.id = id;
+    ta.placeholder = placeholder;
+    ta.value = points[i][key];
+    ta.addEventListener('input', () => { points[i][key] = ta.value; });
+    const err = document.createElement('p');
+    err.className = 'error-msg';
+    err.textContent = 'ここを入れてください';
+    f.append(label, ta, err);
+    return f;
+  }
+
+  // 3択のボタン（可能性・重大性）
+  function pointChoiceField(i, key, labelText) {
+    const f = document.createElement('div');
+    f.className = 'field';
+    f.dataset.field = `p${i}-${key}`;
+    const lab = document.createElement('span');
+    lab.className = 'label';
+    lab.id = `p${i}-${key}-label`;
+    lab.textContent = labelText;
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.setAttribute('role', 'radiogroup');
+    seg.setAttribute('aria-labelledby', lab.id);
+    const labels = scaleLabels(key);
+    [1, 2, 3].forEach((n) => {
+      const item = document.createElement('label');
+      item.className = 'seg-item';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = `p${i}-${key}`;
+      input.value = String(n);
+      input.checked = points[i][key] === n;
+      input.addEventListener('change', () => {
+        points[i][key] = n;
+        paintRating(f.parentNode.querySelector('.rating'), points[i]);
+      });
+      const span = document.createElement('span');
+      const num = document.createElement('b');
+      num.textContent = String(n);
+      span.append(num, document.createTextNode(labels[n] || ''));
+      item.append(input, span);
+      seg.appendChild(item);
+    });
+    const err = document.createElement('p');
+    err.className = 'error-msg';
+    err.textContent = 'どれか1つ選んでください';
+    f.append(lab, seg, err);
+    return f;
+  }
+
+  function renderPoints() {
+    const list = $('pointList');
+    list.innerHTML = '';
+    points.forEach((p, i) => {
+      const box = document.createElement('div');
+      box.className = 'point';
+      const head = document.createElement('div');
+      head.className = 'point-head';
+      const no = document.createElement('span');
+      no.className = 'point-no';
+      no.textContent = `${i + 1}件目`;
+      const badge = document.createElement('span');
+      badge.className = i < requiredCount ? 'req' : 'opt';
+      badge.textContent = i < requiredCount ? '必須' : '任意';
+      head.append(no, badge);
+      if (i >= requiredCount) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'point-del';
+        del.textContent = 'この件を削除';
+        del.addEventListener('click', () => {
+          points.splice(i, 1);
+          refreshPoints();
+        });
+        head.appendChild(del);
+      }
+      const rate = document.createElement('p');
+      rate.setAttribute('aria-live', 'polite');
+      paintRating(rate, p);
+      box.append(
+        head,
+        pointTextField(i, 'when', 'どのようなときに', '例：脚立の上で天井の配線をするとき'),
+        pointTextField(i, 'what', 'このような事が起こりうる', '例：バランスを崩して落ちる'),
+        pointChoiceField(i, 'likelihood', '可能性'),
+        pointChoiceField(i, 'severity', '重大性'),
+        rate,
+        pointTextField(i, 'action', '対策', '例：開き止めを確認し、天板には乗らない'),
+      );
+      list.appendChild(box);
+    });
+    $('addPoint').hidden = points.length >= MAX_POINTS;
+  }
+
+  // 条件が変わるたびに呼ぶ。必要な件数を決め直し、欄と参考例を作り直す
+  function refreshPoints() {
+    const cond = conditions();
+    requiredCount = requiredPoints(cond);
+    while (points.length < requiredCount) points.push(newPoint(false));
+    // 必要な件数が減ったら、自動で増やした空の欄だけ片付ける（書いてある欄・自分で足した欄は残す）
+    while (points.length > requiredCount && !points[points.length - 1].manual && pointEmpty(points[points.length - 1])) points.pop();
+    $('pointNeed').textContent = cond.types.length === 0
+      ? '作業種別を選ぶと、必要な件数が決まります（最低1件）。'
+      : `この作業では、危険のポイントが ${requiredCount}件 必要です（${MAX_POINTS}件まで追加できます）。`;
+    renderPoints();
+    renderExamples(cond);
+  }
+
+  $('addPoint').addEventListener('click', () => {
+    if (points.length >= MAX_POINTS) return;
+    points.push(newPoint(true));
+    renderPoints();
+    const added = $(`p${points.length - 1}-when-in`);
+    if (added) added.focus();
+  });
+
+  // 作業種別・屋内外・天気が変わったら件数と参考例を決め直す
+  form.addEventListener('change', (e) => {
+    const name = e.target.name;
+    if (name === 'preCheck') updatePreProgress();
+    if (name === 'place') updateWeatherField();
+    if (name === 'workTypes' || name === 'place' || name === 'weather') refreshPoints();
+  });
 
   // 指示書QR
   // 指示書の内容の形式（事務所PC用 qr.html の parseOrder と同じ）
@@ -618,9 +1007,6 @@
     // 別の工事の指示書を読んだら、前の工事の基本情報は捨てる
     if (report && report.orderNo !== d.orderNo) report = null;
     if (d.workContent) $('workContent').value = d.workContent;
-    clientItems = d.clientItems;
-    renderClientItems();
-    $('clientSource').textContent = '工事指示書の項目です。';
     info.textContent = `✓ 指示書を読み込みました${no}`;
     return '指示書を読み込みました';
   }
@@ -771,7 +1157,7 @@
     loadOrderText(text);
   });
 
-  // 参加者
+  // 参加者（人数はここから自動で数える）
   const members = [];
 
   function renderMembers() {
@@ -788,6 +1174,7 @@
       del.addEventListener('click', () => {
         members.splice(i, 1);
         renderMembers();
+        refreshPoints();
       });
       li.appendChild(del);
       list.appendChild(li);
@@ -807,6 +1194,7 @@
     members.push(name);
     input.value = '';
     renderMembers();
+    refreshPoints(); // 人数で必要な件数・参考例が変わることがある
     clearError('members');
     input.focus();
   }
@@ -821,12 +1209,14 @@
 
   // 入力チェック
   function setError(key, on) {
-    form.querySelector(`[data-field="${key}"]`).classList.toggle('has-error', on);
+    const box = form.querySelector(`[data-field="${key}"]`);
+    if (box) box.classList.toggle('has-error', on);
   }
   function clearError(key) { setError(key, false); }
 
-  function checkedHazards() {
-    return [...form.querySelectorAll('input[name="hazards"]:checked')].map((el) => el.value);
+  // 入力が要る件：必須の件と、任意でも何か書いてある件（任意で全部空の件は無いものとして扱う）
+  function activePoints() {
+    return points.map((p, i) => ({ p, i })).filter(({ p, i }) => i < requiredCount || !pointEmpty(p));
   }
 
   form.addEventListener('input', (e) => {
@@ -837,17 +1227,39 @@
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const onSheet = $('customerSheet').checked;
-    const errors = {
-      projectName: !$('projectName').value.trim(),
-      workDate: !$('workDate').value,
-      hazards: !onSheet && checkedHazards().length === 0,
-      members: !onSheet && members.length === 0,
-    };
-    Object.entries(errors).forEach(([key, on]) => setError(key, on));
+    if (!onSheet && !rules) {
+      $('rulesMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast('ルールを読み込めていません');
+      return;
+    }
+    const cond = conditions();
+    // 画面の上から順に並べる（最初の未入力の場所へ移動するため）
+    const errors = [
+      ['projectName', !$('projectName').value.trim()],
+      ['workDate', !$('workDate').value],
+      ['workTypes', !onSheet && cond.types.length === 0],
+      ['members', !onSheet && members.length === 0],
+      ['place', !onSheet && !cond.place],
+      ['weather', !onSheet && cond.place === '屋外' && !cond.weather],
+      ['preChecks', !onSheet && !allPreChecked()],
+    ];
+    const active = new Set(activePoints().map(({ i }) => i));
+    points.forEach((p, i) => {
+      const need = !onSheet && active.has(i);
+      // 空白だけは未入力として扱う
+      errors.push(
+        [`p${i}-when`, need && !p.when.trim()],
+        [`p${i}-what`, need && !p.what.trim()],
+        [`p${i}-likelihood`, need && !p.likelihood],
+        [`p${i}-severity`, need && !p.severity],
+        [`p${i}-action`, need && !p.action.trim()],
+      );
+    });
+    errors.forEach(([key, on]) => setError(key, on));
 
-    const firstError = Object.keys(errors).find((k) => errors[k]);
+    const firstError = errors.find(([, on]) => on);
     if (firstError) {
-      const box = form.querySelector(`[data-field="${firstError}"]`);
+      const box = form.querySelector(`[data-field="${firstError[0]}"]`);
       box.scrollIntoView({ behavior: 'smooth', block: 'center' });
       showToast('未入力の項目があります');
       return;
@@ -862,52 +1274,61 @@
     return `${y}年${m}月${d}日（${w}）`;
   }
 
-  // 確認画面とTeams送信文の両方で使う内容（[項目名, 値] の並び）
+  // 確認画面とTeams送信文の両方で使う内容（[項目名, 値, 目立たせ方] の並び）
   function summaryRows() {
     const head = [
       ...(orderNo ? [['受注番号', orderNo]] : []),
       ['案件名', $('projectName').value.trim()],
-      // 日報QRを読んだときだけ出る
+      // Salesforceや日報から取り込んだときだけ出る
       ...(report && report.manager ? [['工事責任者', report.manager]] : []),
       ...(report && report.userName ? [['ユーザ名', report.userName]] : []),
       ['作業日', formatDate($('workDate').value)],
-      ['作業内容', $('workContent').value.trim()],
     ];
+    const workContent = ['具体的な作業内容', $('workContent').value.trim()];
     if ($('customerSheet').checked) {
-      return { rows: [...head, ['KYの実施方法', 'お客様指定の用紙で実施']], notDone: 0 };
+      return { rows: [...head, workContent, ['KYの実施方法', 'お客様指定の用紙で実施']] };
     }
-    const hazards = checkedHazards().map((h) => {
-      const other = $('hazardOtherText').value.trim();
-      return h === 'その他' && other ? `その他（${other}）` : h;
+    const cond = conditions();
+    const like = scaleLabels('likelihood');
+    const sev = scaleLabels('severity');
+    const pointRows = activePoints().map(({ p }, n) => {
+      const r = rating(p);
+      const text = [
+        `どのようなときに：${p.when.trim()}`,
+        `起こりうること：${p.what.trim()}`,
+        `可能性：${p.likelihood}（${like[p.likelihood] || ''}）／重大性：${p.severity}（${sev[p.severity] || ''}）`,
+        `評価：${r ? `${r.label}（${r.score}点）` : ''}`,
+        `対策：${p.action.trim()}`,
+      ].join('\n');
+      // 評価が「大きい」の件は目立たせる
+      return [`危険のポイント ${n + 1}`, text, r && r.level === 'high' ? 'risk-high' : ''];
     });
-    const flags = clientDoneFlags();
     return {
       rows: [
         ...head,
-        ['危険のポイント', hazards.join('、')],
-        ['受注先の指定項目', clientItems.map((text, i) => `${flags[i] ? '✓ 実施済み' : '× 未実施'}：${text}`).join('\n')],
-        ['対策', $('measures').value.trim()],
-        ['重点項目', $('focusItem').value.trim()],
+        ['作業種別', cond.types.join('、')],
+        workContent,
         ['参加者', `${members.join('、')}（${members.length}名）`],
+        ['作業場所', `${cond.place}${cond.weather ? `（天気：${cond.weather}）` : ''}`],
+        ['作業前確認事項', `${preCheckBoxes().length}項目すべて確認済み`],
+        ...pointRows,
+        ['本日の安全目標', $('focusItem').value.trim()],
       ],
-      notDone: flags.filter((f) => !f).length,
     };
   }
 
   function openSummary() {
-    const { rows, notDone } = summaryRows();
+    const { rows } = summaryRows();
     const dl = $('summary');
     dl.innerHTML = '';
-    rows.forEach(([k, v]) => {
+    rows.forEach(([k, v, cls]) => {
       const dt = document.createElement('dt');
       dt.textContent = k;
       const dd = document.createElement('dd');
       dd.textContent = v || '（未入力）';
+      if (cls) dd.className = cls;
       dl.append(dt, dd);
     });
-    // 未実施があっても確認画面には進める（注意だけ出す）
-    $('clientWarn').hidden = notDone === 0;
-    $('clientWarn').textContent = `受注先の指定項目に未実施が${notDone}件あります。`;
     // Teams送信の案内は開くたびに最初の状態へ戻す
     $('teamsStep').hidden = true;
     $('sendTeams').hidden = false;
@@ -962,14 +1383,14 @@
   }
 
   function teamsText() {
-    const { rows, notDone } = summaryRows();
+    const { rows } = summaryRows();
     const lines = ['【KY報告】'];
-    rows.forEach(([k, v]) => {
+    rows.forEach(([k, v, cls]) => {
       const val = v || '（未入力）';
       // 複数行の値は項目名の下に並べる
-      lines.push(val.includes('\n') ? `■${k}\n${val}` : `■${k}：${val}`);
+      const key = cls === 'risk-high' ? `${k} ※評価が大きい` : k;
+      lines.push(val.includes('\n') ? `■${key}\n${val}` : `■${key}：${val}`);
     });
-    if (notDone > 0) lines.push(`※受注先の指定項目に未実施が${notDone}件あります`);
     return lines.join('\n');
   }
 
@@ -1038,7 +1459,8 @@
     history.replaceState(null, '', location.pathname + location.search);
   }
 
-  renderClientItems();
+  renderRuleParts();
+  loadRules();
   renderMembers();
   loadOrderFromAddress();
   // アプリを開いたままの画面でQRのアドレスに移った場合（ページは読み直されない）
