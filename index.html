@@ -303,6 +303,14 @@
   .point-del { margin-left: auto; min-height: 44px; padding: 0 12px; border: 2px solid var(--line); border-radius: 8px; background: #fff; color: var(--muted); font-weight: 700; font-size: 15px; cursor: pointer; }
   .point-text { min-height: 72px; }
   .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .seg.two { grid-template-columns: repeat(2, 1fr); }
+  .seg-item.ng input:checked + span { border-color: var(--error); background: var(--error-bg); color: var(--error); }
+  /* 体調チェック */
+  .health-row { margin-bottom: 12px; }
+  .health-name { display: block; margin-bottom: 6px; font-weight: 700; }
+  .has-error #healthList { outline: 2px solid var(--error); outline-offset: 4px; border-radius: 8px; }
+  #healthNgBox[hidden] { display: none; }
+  .health-ng-msg { margin: 16px 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--error-bg); color: var(--error); font-weight: 700; }
   .seg-item { position: relative; display: block; }
   .seg-item input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .seg-item span {
@@ -343,7 +351,7 @@
   .note[hidden] { display: none; }
 
   /* 確認画面：評価が「大きい」の件 */
-  .dlg-body dd.risk-high { padding: 8px 10px; border-left: 6px solid var(--error); background: var(--error-bg); border-radius: 6px; }
+  .dlg-body dd.risk-high, .dlg-body dd.alert { padding: 8px 10px; border-left: 6px solid var(--error); background: var(--error-bg); border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -405,6 +413,18 @@
         <div class="hazards" id="workTypeList" role="group" aria-labelledby="worktype-label"></div>
         <p class="error-msg">作業種別を1つ以上選んでください</p>
       </div>
+      <!-- 対象設備は記録と集計のための項目。危険のポイントの件数・参考例には使わない -->
+      <div class="field" data-field="equipment" data-ky-section>
+        <span class="label" id="equipment-label">対象設備<span class="req">必須</span></span>
+        <span class="hint" style="margin:0 0 8px">当てはまるものを全部押す</span>
+        <!-- 中身は rules.json の equipment から作る -->
+        <div class="hazards" id="equipmentList" role="group" aria-labelledby="equipment-label"></div>
+        <p class="error-msg">対象設備を1つ以上選んでください</p>
+        <div class="other-box" id="equipOtherBox" hidden>
+          <label class="label" for="equipOther">その他の設備（任意）</label>
+          <input class="input" id="equipOther" name="equipOther" type="text" autocomplete="off" placeholder="例：防犯カメラ">
+        </div>
+      </div>
       <div class="field">
         <label class="label" for="workContent">具体的な作業内容</label>
         <textarea class="textarea" id="workContent" name="workContent" placeholder="例：2階天井内のケーブル敷設"></textarea>
@@ -451,6 +471,25 @@
         <!-- 中身は rules.json の preChecks から作る -->
         <ul class="client-list" id="preCheckList" aria-labelledby="h-pre"></ul>
         <p class="error-msg">全部の項目を確認してください</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-health" data-ky-section>
+      <h2 id="h-health">体調チェック</h2>
+      <div class="field" data-field="health">
+        <span class="hint" style="margin:0 0 10px">参加者ごとに「良」か「否」を押す（全員必須）</span>
+        <!-- 参加者の名前から行を作る。結果は名前ごとに覚えておく -->
+        <div id="healthList"></div>
+        <p class="empty" id="healthEmpty">参加者を追加すると、ここに一人ずつ出ます</p>
+        <p class="error-msg">全員の体調を選んでください</p>
+      </div>
+      <div id="healthNgBox" hidden>
+        <p class="health-ng-msg">作業責任者に報告し、作業させるか判断してください</p>
+        <div class="field" data-field="healthAction">
+          <label class="label" for="healthAction">対応内容<span class="req">必須</span></label>
+          <textarea class="textarea" id="healthAction" name="healthAction" placeholder="例：軽作業のみに変更／本日は作業から外す"></textarea>
+          <p class="error-msg">対応内容を入れてください</p>
+        </div>
       </div>
     </section>
 
@@ -521,7 +560,7 @@
     <p class="note" id="shareNoQr" hidden>内容が多いため、QRコードは出せません。リンクをコピーしてTeamsで送ってください。</p>
     <textarea class="teams-manual" id="shareManual" readonly hidden aria-label="スマホに送るリンク"></textarea>
     <p class="hint" id="shareMeta"></p>
-    <p class="hint">作業日・天気・作業前確認事項・「お客様指定の用紙」は引き継ぎません（当日に入れ直します）。</p>
+    <p class="hint">作業日・天気・作業前確認事項・体調チェック・「お客様指定の用紙」は引き継ぎません（当日に入れ直します）。</p>
   </div>
   <div class="dlg-foot">
     <button class="btn btn-primary" type="button" id="shareCopy">リンクをコピー</button>
@@ -595,6 +634,9 @@
     severity: { 1: '軽症～不休', 2: '中度～休業', 3: '重度～死亡' },
     rating: [{ max: 3, label: '小さい' }, { max: 4, label: '中程度' }, { max: 6, label: '大きい' }],
   };
+  // rules.json に equipment が無いとき（電波が無く、前の版の控えを使っている場合など）の予備
+  const DEFAULT_EQUIPMENT = ['電話設備', 'LAN・ネットワーク', '無線AP', '光・通信ケーブル', 'その他'];
+  const EQUIP_OTHER = 'その他';
   let rules = null;
 
   function validRules(r) {
@@ -683,12 +725,24 @@
     $('preProgress').textContent = boxes.length ? `${boxes.filter((el) => el.checked).length}／${boxes.length} 確認済み` : '';
   }
 
-  // rules.json の内容で、作業種別・天気・作業前確認事項の選択肢を作り直す
+  function equipmentChoices() {
+    const list = rules && Array.isArray(rules.equipment) ? rules.equipment.filter((x) => typeof x === 'string' && x) : [];
+    return list.length ? list : DEFAULT_EQUIPMENT;
+  }
+
+  // 「その他」を選んだときだけ、設備名の欄を出す（入れた文字は消さない）
+  function updateEquipOther() {
+    $('equipOtherBox').hidden = !checkedValues('equipment').includes(EQUIP_OTHER);
+  }
+
+  // rules.json の内容で、作業種別・対象設備・天気・作業前確認事項の選択肢を作り直す
   function renderRuleParts() {
     buildChoices($('workTypeList'), 'checkbox', 'workTypes', rules ? Object.keys(rules.dangerLevel) : []);
+    buildChoices($('equipmentList'), 'checkbox', 'equipment', equipmentChoices());
     buildChoices($('weatherList'), 'radio', 'weather', rules && rules.weather ? Object.keys(rules.weather) : []);
     renderPreChecks();
     applyWanted();
+    updateEquipOther();
     updateRulesMsg();
     refreshPoints();
   }
@@ -1055,6 +1109,11 @@
     const name = e.target.name;
     if (name === 'preCheck') updatePreProgress();
     if (name === 'place') updateWeatherField();
+    if (name === 'equipment') updateEquipOther();
+    if (name.startsWith('health-')) {
+      health[e.target.dataset.member] = e.target.value;
+      updateHealthNg();
+    }
     if (name === 'workTypes' || name === 'place' || name === 'weather') refreshPoints();
   });
 
@@ -1324,6 +1383,62 @@
     });
     $('memberCount').textContent = `${members.length}名`;
     $('memberEmpty').hidden = members.length > 0;
+    renderHealth();
+  }
+
+  // ---- 体調チェック（参加者ごとに 良／否） ----
+  // 結果は名前ごとに覚える。参加者を消しても結果は残し、同じ名前を足し直すと戻る
+  let health = {};
+
+  function renderHealth() {
+    const list = $('healthList');
+    list.innerHTML = '';
+    members.forEach((name, i) => {
+      const row = document.createElement('div');
+      row.className = 'health-row';
+      const lab = document.createElement('span');
+      lab.className = 'health-name';
+      lab.id = `health-${i}-label`;
+      lab.textContent = name;
+      const seg = document.createElement('div');
+      seg.className = 'seg two';
+      seg.setAttribute('role', 'radiogroup');
+      seg.setAttribute('aria-labelledby', lab.id);
+      ['良', '否'].forEach((v) => {
+        const item = document.createElement('label');
+        item.className = `seg-item${v === '否' ? ' ng' : ''}`;
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = `health-${i}`;
+        input.value = v;
+        input.dataset.member = name;
+        input.checked = health[name] === v;
+        const span = document.createElement('span');
+        const b = document.createElement('b');
+        b.textContent = v;
+        span.appendChild(b);
+        item.append(input, span);
+        seg.appendChild(item);
+      });
+      row.append(lab, seg);
+      list.appendChild(row);
+    });
+    $('healthEmpty').hidden = members.length > 0;
+    updateHealthNg();
+  }
+
+  // 今の参加者のうち「否」の人数
+  function healthNgCount() {
+    return members.filter((name) => health[name] === '否').length;
+  }
+
+  function allHealthChecked() {
+    return members.length > 0 && members.every((name) => health[name] === '良' || health[name] === '否');
+  }
+
+  // 1人でも「否」があれば、報告の案内と「対応内容」の欄を出す
+  function updateHealthNg() {
+    $('healthNgBox').hidden = healthNgCount() === 0;
   }
 
   function addMember() {
@@ -1381,10 +1496,14 @@
       ['projectName', !$('projectName').value.trim()],
       ['workDate', !$('workDate').value],
       ['workTypes', !onSheet && cond.types.length === 0],
+      ['equipment', !onSheet && checkedValues('equipment').length === 0],
       ['members', !onSheet && members.length === 0],
       ['place', !onSheet && !cond.place],
       ['weather', !onSheet && cond.place === '屋外' && !cond.weather],
       ['preChecks', !onSheet && !allPreChecked()],
+      ['health', !onSheet && members.length > 0 && !allHealthChecked()],
+      // 空白だけは未入力として扱う
+      ['healthAction', !onSheet && healthNgCount() > 0 && !$('healthAction').value.trim()],
     ];
     const active = new Set(activePoints().map(({ i }) => i));
     points.forEach((p, i) => {
@@ -1446,14 +1565,25 @@
       // 評価が「大きい」の件は目立たせる
       return [`危険のポイント ${n + 1}`, text, r && r.level === 'high' ? 'risk-high' : ''];
     });
+    const equipment = checkedValues('equipment').map((v) => {
+      const other = $('equipOther').value.trim();
+      return v === EQUIP_OTHER && other ? `${EQUIP_OTHER}（${other}）` : v;
+    });
+    const ng = healthNgCount();
+    // 「否」がある場合は目立たせる
+    const healthRow = ng > 0
+      ? ['体調', `否 ${ng}名（対応：${$('healthAction').value.trim()}）`, 'alert']
+      : ['体調', '全員良'];
     return {
       rows: [
         ...head,
         ['作業種別', cond.types.join('、')],
+        ['対象設備', equipment.join('、')],
         workContent,
         ['参加者', `${members.join('、')}（${members.length}名）`],
         ['作業場所', `${cond.place}${cond.weather ? `（天気：${cond.weather}）` : ''}`],
         ['作業前確認事項', `${preCheckBoxes().length}項目すべて確認済み`],
+        healthRow,
         ...pointRows,
         ['本日の安全目標', $('focusItem').value.trim()],
       ],
@@ -1533,7 +1663,7 @@
     rows.forEach(([k, v, cls]) => {
       const val = v || '（未入力）';
       // 複数行の値は項目名の下に並べる
-      const key = cls === 'risk-high' ? `${k} ※評価が大きい` : k;
+      const key = cls === 'risk-high' ? `${k} ※評価が大きい` : cls === 'alert' ? `${k} ※要確認` : k;
       lines.push(val.includes('\n') ? `■${key}\n${val}` : `■${key}：${val}`);
     });
     return lines.join('\n');
@@ -1605,13 +1735,16 @@
       el.checked = values.includes(el.value);
     });
     set('workTypes', wanted.types);
+    set('equipment', wanted.equipment || []);
     set('weather', wanted.weather ? [wanted.weather] : []);
     set('preCheck', wanted.pre);
     updatePreProgress();
     if (rules) wanted = null;
   }
 
-  // forLink = true のときは、当日に入れ直す項目（天気・作業前確認事項・お客様指定の用紙）を含めない
+  // forLink = true のときは、当日に入れ直す項目（天気・作業前確認事項・体調チェック・お客様指定の用紙）を含めない
+  //   e 対象設備 / x 対象設備「その他」の設備名
+  //   端末内の保存だけ： hc 体調チェック {名前: 良・否} / ha 体調「否」の対応内容
   function collectState(forLink) {
     const st = {
       v: 1,
@@ -1619,6 +1752,8 @@
       o: orderNo,
       r: report ? [report.manager, report.userName, report.userContact, report.requester, report.requesterContact].map((x) => x || '') : null,
       t: wanted ? wanted.types : checkedValues('workTypes'),
+      e: wanted ? (wanted.equipment || []) : checkedValues('equipment'),
+      x: $('equipOther').value.trim(),
       c: $('workContent').value.trim(),
       m: members.slice(),
       p: checkedValues('place')[0] || '',
@@ -1633,6 +1768,8 @@
     } else {
       st.w = wanted ? wanted.weather : (checkedValues('weather')[0] || '');
       st.k = wanted ? wanted.pre : checkedValues('preCheck');
+      st.hc = Object.fromEntries(members.filter((name) => health[name]).map((name) => [name, health[name]]));
+      st.ha = $('healthAction').value.trim();
       st.s = $('customerSheet').checked;
       st.d = todayValue();
     }
@@ -1641,12 +1778,13 @@
 
   function stateHasContent(st) {
     const any = (x) => Array.isArray(x) && x.length > 0;
-    return !!(st && (st.n || st.o || st.c || st.g || st.p || st.s || any(st.t) || any(st.m) || any(st.h)));
+    return !!(st && (st.n || st.o || st.c || st.g || st.p || st.s || st.x || any(st.t) || any(st.e) || any(st.m) || any(st.h)));
   }
 
   // 入力を全部消して最初の状態に戻す（Teamsの送信先の登録は消さない）
   function clearInputs() {
-    ['projectName', 'workContent', 'focusItem', 'memberInput'].forEach((id) => { $(id).value = ''; });
+    ['projectName', 'workContent', 'focusItem', 'memberInput', 'equipOther', 'healthAction'].forEach((id) => { $(id).value = ''; });
+    health = {};
     $('workDate').value = todayValue();
     form.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach((el) => { el.checked = false; });
     members.length = 0;
@@ -1658,6 +1796,7 @@
     form.querySelectorAll('.has-error').forEach((el) => el.classList.remove('has-error'));
     applySheet();
     updateWeatherField();
+    updateEquipOther();
     updatePreProgress();
     renderMembers();
     refreshPoints();
@@ -1678,6 +1817,14 @@
       : null;
     $('workContent').value = str(st.c, 2000);
     $('focusItem').value = str(st.g, 300);
+    $('equipOther').value = str(st.x, 100);
+    // 体調チェックと対応内容は、同じ日に開き直したときだけ戻す（古い保存データには無い）
+    if (keepToday && st.hc && typeof st.hc === 'object' && !Array.isArray(st.hc)) {
+      Object.keys(st.hc).slice(0, 50).forEach((name) => {
+        if (st.hc[name] === '良' || st.hc[name] === '否') health[name.slice(0, 50)] = st.hc[name];
+      });
+    }
+    $('healthAction').value = keepToday ? str(st.ha, 500) : '';
     arr(st.m, 50).forEach((x) => {
       const name = str(x, 50).trim();
       if (name && !members.includes(name)) members.push(name);
@@ -1689,6 +1836,7 @@
     }));
     wanted = {
       types: arr(st.t, 30).map((x) => str(x, 50)),
+      equipment: arr(st.e, 20).map((x) => str(x, 50)),
       weather: keepToday ? str(st.w, 20) : '',
       pre: keepToday ? arr(st.k, 20).map((x) => str(x, 100)) : [],
     };
@@ -1842,7 +1990,7 @@
       showToast(`リンクを読み込めませんでした（${e.message}）`);
       return false;
     }
-    showInfo('✓ 引き継いだ入力を読み込みました。作業日・天気・作業前確認事項は入れ直してください');
+    showInfo('✓ 引き継いだ入力を読み込みました。作業日・天気・作業前確認事項・体調チェックは入れ直してください');
     showToast('引き継いだ入力を読み込みました');
     saveDraftNow();
     return true;
